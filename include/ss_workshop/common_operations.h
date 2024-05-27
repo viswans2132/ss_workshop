@@ -1,5 +1,5 @@
-#ifndef DRONE_CONTROLLER_COMMON_H_
-#define DRONE_CONTROLLER_COMMON_H_
+#ifndef SS_WORKSHOP_COMMON_H_
+#define SS_WORKSHOP_COMMON_H_
 
 #include <assert.h>
 #include <math.h>
@@ -16,7 +16,7 @@
 
 
 
-namespace drone_controller{
+namespace ss_workshop{
 	struct Rotor {
 		Rotor()
 			: angle(0.0),

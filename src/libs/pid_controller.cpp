@@ -1,7 +1,7 @@
-#include "drone_controller/pid_controller.h"
+#include "ss_workshop/pid_controller.h"
 
 
-namespace drone_controller{
+namespace ss_workshop{
 	PidController::PidController()
 		: initialized_params_(false),
 		  controller_active_(false)	{

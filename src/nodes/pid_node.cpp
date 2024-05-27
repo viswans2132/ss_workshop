@@ -1,6 +1,6 @@
 #include "pid_node.h"
 
-namespace drone_controller{
+namespace ss_workshop{
 	PidNode::PidNode(
 		const ros::NodeHandle& nh, const ros::NodeHandle& private_nh)
 	:nh_(nh), private_nh_(private_nh){
@@ -218,7 +218,7 @@ int main(int argc, char** argv) {
 
   ros::NodeHandle nh;
   ros::NodeHandle private_nh("~");
-  drone_controller::PidNode pid_node(nh, private_nh);
+  ss_workshop::PidNode pid_node(nh, private_nh);
 
   ros::spin();
 

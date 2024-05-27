@@ -1,13 +1,13 @@
-#ifndef DRONE_CONTROLLER_PID_CONTROLLER_H_
-#define DRONE_CONTROLLER_PID_CONTROLLER_H_
+#ifndef SS_WORKSHOP_PID_CONTROLLER_H_
+#define SS_WORKSHOP_PID_CONTROLLER_H_
 
 #include <mav_msgs/conversions.h>
 #include <mav_msgs/eigen_mav_msgs.h>
 // #include <geometric_msgs/Pose.h>
 
-#include "drone_controller/common_operations.h"
+#include "ss_workshop/common_operations.h"
 
-namespace drone_controller{
+namespace ss_workshop{
 	class PidController{
 	public:
 		PidController();

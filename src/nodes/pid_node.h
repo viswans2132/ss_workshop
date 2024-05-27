@@ -1,6 +1,6 @@
 
-#ifndef DRONE_CONTROLLER_PID_NODE_H_
-#define DRONE_CONTROLLER_PID_NODE_H_
+#ifndef SS_WORKSHOP_PID_NODE_H_
+#define SS_WORKSHOP_PID_NODE_H_
 
 #include <ros/ros.h>
 #include <mav_msgs/default_topics.h>
@@ -23,12 +23,9 @@
 #include <ros/callback_queue.h>
 #include <ros/ros.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
-//#include <apriltag_ros/AprilTagDetectionArray.h>
+#include "ss_workshop/pid_controller.h"
 
-// #include "rrc_control/common.h"
-#include "drone_controller/pid_controller.h"
-
-namespace drone_controller{
+namespace ss_workshop{
 	class PidNode{
 	public:
 		PidNode(const ros::NodeHandle& nh, const ros::NodeHandle& private_nh);
