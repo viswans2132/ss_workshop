@@ -13,11 +13,10 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 find_package(Eigen REQUIRED)
-find_package(OsqpEigen REQUIRED)
 
 catkin_package(
   INCLUDE_DIRS include ${Eigen_INCLUDE_DIRS}
-  LIBRARIES  pid_controller asm_controller rsb_controller ec_controller aec_controller ecbf_controller multi_ecbf_controller
+  LIBRARIES  ss_pid_controller
   CATKIN_DEPENDS geometry_msgs mav_msgs nav_msgs roscpp sensor_msgs 
   DEPENDS Eigen 
 )
@@ -28,24 +27,37 @@ include_directories(
   ${Eigen_INCLUDE_DIRS}
 )
 
-add_library(pid_controller
+add_library(ss_pid_controller
   src/libs/pid_controller.cpp
 )
 
-target_link_libraries(pid_controller ${catkin_LIBRARIES})
-add_dependencies(pid_controller ${catkin_EXPORTED_TARGETS})
+add_library(ss_vel_controller
+  src/libs/vel_controller.cpp
+)
+
+target_link_libraries(ss_pid_controller ${catkin_LIBRARIES})
+add_dependencies(ss_pid_controller ${catkin_EXPORTED_TARGETS})
 
 
-add_executable(pid_node src/nodes/pid_node.cpp)
-add_dependencies(pid_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(pid_node
-  pid_controller ${catkin_LIBRARIES})
+target_link_libraries(ss_vel_controller ${catkin_LIBRARIES})
+add_dependencies(ss_vel_controller ${catkin_EXPORTED_TARGETS})
 
-install(TARGETS pid_controller 
+
+add_executable(ss_pid_node src/nodes/pid_node.cpp)
+add_dependencies(ss_pid_node ${catkin_EXPORTED_TARGETS})
+target_link_libraries(ss_pid_node
+  ss_pid_controller ${catkin_LIBRARIES})
+
+add_executable(ss_vel_node src/nodes/vel_node.cpp)
+add_dependencies(ss_vel_node ${catkin_EXPORTED_TARGETS})
+target_link_libraries(ss_vel_node
+  ss_vel_controller ${catkin_LIBRARIES})
+
+install(TARGETS ss_pid_controller ss_vel_controller
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
 )
 
-install(TARGETS pid_node 
+install(TARGETS ss_pid_node ss_vel_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
