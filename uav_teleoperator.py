@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
 import rospy
+import numpy as np
 from nav_msgs.msg import Odometry
 from pynput import keyboard
+from tf.transformations import *
 
 
 class DroneTeleoperator:
@@ -16,6 +18,10 @@ class DroneTeleoperator:
         self.odom.pose.pose.position.x = 0.0
         self.odom.pose.pose.position.y = 0.0
         self.odom.pose.pose.position.z = 0.0
+        self.yaw_angle = 0.0
+        self.odom.pose.pose.orientation.x = 0.0
+        self.odom.pose.pose.orientation.y = 0.0
+        self.odom.pose.pose.orientation.z = 0.0
         self.odom.pose.pose.orientation.w = 1.0
         self.rate = rospy.Rate(10)  # 10 Hz
 
@@ -26,21 +32,32 @@ class DroneTeleoperator:
     def on_press(self, key):
         try:
             if key == keyboard.Key.up:  # Forward
-                self.odom.pose.pose.position.x += 1.0
+                self.odom.pose.pose.position.x += 0.1
             elif key == keyboard.Key.down:  # Backward
-                self.odom.pose.pose.position.x -= 1.0
+                self.odom.pose.pose.position.x -= 0.1
             elif key == keyboard.Key.left:  # Left
-                self.odom.pose.pose.position.y += 1.0
+                self.odom.pose.pose.position.y += 0.1
             elif key == keyboard.Key.right:  # Right
-                self.odom.pose.pose.position.y -= 1.0
+                self.odom.pose.pose.position.y -= 0.1
             elif key.char == "w":  # Up
-                self.odom.pose.pose.position.z += 1.0
+                self.odom.pose.pose.position.z += 0.1
             elif key.char == "s":  # Down
-                self.odom.pose.pose.position.z -= 1.0
+                self.odom.pose.pose.position.z -= 0.1
             elif key.char == "a":  # Yaw Left
-                self.odom.pose.pose.orientation.z += 0.1
+                self.yaw_angle += 0.1
+                if self.yaw_angle >= np.pi:
+                    self.yaw_angle = self.yaw_angle - np.pi
             elif key.char == "d":  # Yaw Right
-                self.odom.pose.pose.orientation.z -= 0.1
+                self.yaw_angle -= 0.1
+                if self.yaw_angle <= -np.pi:
+                    self.yaw_angle = self.yaw_angle + np.pi
+            print("alive")
+            rospy.loginfo(f"yaw angle: {self.yaw_angle}")
+            quat = quaternion_from_euler(0.0, 0.0, self.yaw_angle)
+            self.odom.pose.pose.orientation.x = quat[0]
+            self.odom.pose.pose.orientation.y = quat[1]
+            self.odom.pose.pose.orientation.z = quat[2]
+            self.odom.pose.pose.orientation.w = quat[3]
         except AttributeError:
             pass
 
