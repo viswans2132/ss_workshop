@@ -51,8 +51,6 @@ class DroneTeleoperator:
                 self.yaw_angle -= 0.1
                 if self.yaw_angle <= -np.pi:
                     self.yaw_angle = self.yaw_angle + np.pi
-            print("alive")
-            rospy.loginfo(f"yaw angle: {self.yaw_angle}")
             quat = quaternion_from_euler(0.0, 0.0, self.yaw_angle)
             self.odom.pose.pose.orientation.x = quat[0]
             self.odom.pose.pose.orientation.y = quat[1]

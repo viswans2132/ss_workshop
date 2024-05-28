@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import rospy
 import numpy as np
 from nav_msgs.msg import Odometry
@@ -6,6 +8,12 @@ from geometry_msgs.msg import TwistStamped
 
 class PositionPredictor:
     def __init__(self):
+
+        self.delay = 0.0
+        self.dt = 0.0
+        self.counter = 1
+        self.cmd_vel = [0.0, 0.0, 0.0]
+
         self.odom_sub = rospy.Subscriber(
             "/hummingbird/ground_truth/odometry", Odometry, self.callback_odometry
         )
@@ -21,34 +29,27 @@ class PositionPredictor:
         recv_time = rospy.Time.now()
         pub_time = msg.header.stamp
         self.delay = (recv_time - pub_time).to_sec()
+        
+        self.dt = (self.delay + self.dt) / (self.counter)
+        self.counter += self.counter
         self.estimated_odometry = msg
         self.estimated_odometry.pose.pose.position.x = (
-            msg.pose.pose.position.x + self.twist.twist.linear.x * self.delay
+            msg.pose.pose.position.x + self.cmd_vel[0] * self.dt
         )
         self.estimated_odometry.pose.pose.position.y = (
-            msg.pose.pose.position.y + self.twist.twist.linear.y * self.delay
+            msg.pose.pose.position.y + self.cmd_vel[1] * self.dt
         )
         self.estimated_odometry.pose.pose.position.z = (
-            msg.pose.pose.position.z + self.twist.twist.linear.z * self.delay
+            msg.pose.pose.position.z + self.cmd_vel[2] * self.dt
         )
         self.estimated_odometry.twist.twist.linear.x = (
-            msg.twist.twist.linear.x
-            + np.sin(self.cmd_vel[2])
-            * np.cos(self.cmd_vel[1])
-            * self.cmd_vel[0]
-            * self.delay
+            msg.twist.twist.linear.x * self.cmd_vel[0] * self.dt
         )
         self.estimated_odometry.twist.twist.linear.y = (
-            msg.twist.twist.linear.y
-            + (-np.sin(self.cmd_vel[1]) * self.cmd_vel[0]) * self.delay
+            msg.twist.twist.linear.y + self.cmd_vel[1] * self.dt
         )
         self.estimated_odometry.twist.twist.linear.z = (
-            msg.twist.twist.linear.z
-            + (
-                np.cos(self.cmd_vel[2]) * np.cos(self.cmd_vel[1]) * self.cmd_vel[0]
-                - 9.81
-            )
-            * self.delay
+            msg.twist.twist.linear.z + (self.cmd_vel[2] - 9.81) * self.dt
         )
         self.est_odom_pub.publish(self.estimated_odometry)
 
