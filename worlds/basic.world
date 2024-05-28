@@ -9,7 +9,7 @@
       <uri>model://sun</uri>
     </include>
 
-    <plugin name="ros_link_plugin" filename="libgazebo_ros_link_attacher.so"/>
+    <!-- <plugin name="ros_link_plugin" filename="libgazebo_ros_link_attacher.so"/> -->
     <plugin name="ros_interface_plugin" filename="librotors_gazebo_ros_interface_plugin.so"/>
 
     <physics name='default_physics' default='0' type='ode'>
