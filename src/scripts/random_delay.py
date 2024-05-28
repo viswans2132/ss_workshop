@@ -22,14 +22,14 @@ class RandomDelayNode:
 
     def callback_odometry(self, msg):
         delay = random.uniform(
-            0.005, 0.05
+            0.00, 0.0
         )  # Random delay between 0.01 and 0.05 seconds
         time.sleep(delay)
         self.odom_pub.publish(msg)
 
     def callback_cmd_vel(self, msg):
         delay = random.uniform(
-            0.005, 0.05
+            0.00, 0.0
         )  # Random delay between 0.01 and 0.05 seconds
         time.sleep(delay)
         self.cmd_vel_pub.publish(msg)
