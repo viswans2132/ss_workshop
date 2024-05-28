@@ -9,15 +9,7 @@
       <uri>model://sun</uri>
     </include>
 
-    <include>
-      <uri>model:///home/viswa_ns/sim/src/drone_controller/models</uri>
-      <name>ArtPark</name>
-      <pose>0.0 0.0 0.5 0.0 0.0 0.0</pose>
-
-      <!-- reference to your plugin -->
-      <!-- inside the sdf file "full_complete" in /home/suraj/.gazebo/models -->
-    </include>
-
+    <plugin name="ros_link_plugin" filename="libgazebo_ros_link_attacher.so"/>
     <plugin name="ros_interface_plugin" filename="librotors_gazebo_ros_interface_plugin.so"/>
 
     <physics name='default_physics' default='0' type='ode'>
