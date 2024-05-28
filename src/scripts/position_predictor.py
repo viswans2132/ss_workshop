@@ -41,16 +41,16 @@ class PositionPredictor:
         self.estimated_odometry.pose.pose.position.z = (
             msg.pose.pose.position.z + self.cmd_vel[2] * self.dt
         )
-        self.estimated_odometry.twist.twist.linear.x = (
-            msg.twist.twist.linear.x + self.cmd_vel[0] * self.dt
-        )
-        self.estimated_odometry.twist.twist.linear.y = (
-            msg.twist.twist.linear.y + self.cmd_vel[1] * self.dt
-        )
-        self.estimated_odometry.twist.twist.linear.z = (
-            msg.twist.twist.linear.z
-            + (self.cmd_vel[2] - 9.81) * self.dt  # what is the equilibrium cmd_vel
-        )
+        # self.estimated_odometry.twist.twist.linear.x = (
+        #     msg.twist.twist.linear.x + self.cmd_vel[0] * self.dt
+        # )
+        # self.estimated_odometry.twist.twist.linear.y = (
+        #     msg.twist.twist.linear.y + self.cmd_vel[1] * self.dt
+        # )
+        # self.estimated_odometry.twist.twist.linear.z = (
+        #     msg.twist.twist.linear.z
+        #     + (self.cmd_vel[2] - 9.81) * self.dt  # what is the equilibrium cmd_vel
+        # )
         self.estimated_odometry.header.stamp = rospy.Time.now()
         self.est_odom_pub.publish(self.estimated_odometry)
 

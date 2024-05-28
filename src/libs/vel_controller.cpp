@@ -90,12 +90,12 @@ namespace ss_workshop{
 			last_time = current_time;
 		}
 
-		Eigen::Vector3d position_component = velocity_error.cwiseProduct(Kp_p_);
+		// Eigen::Vector3d position_component = velocity_error.cwiseProduct(Kp_p_);
 		// Eigen::Vector3d derivative_component = velocity_error_derivative.cwiseProduct(Kv_p_);
 		// Eigen::Vector3d integral_component = velocity_error_integral.cwiseProduct(Ki_p_);
 
-		ROS_INFO_STREAM("velocity_error_xyz: " << velocity_error.x() << " : " << velocity_error.y() << " : " << velocity_error.z());
-		ROS_INFO_STREAM("position_component: " << position_component.x() << " : " << position_component.y() << " : " << position_component.z());
+		// ROS_INFO_STREAM("velocity_error_xyz: " << velocity_error.x() << " : " << velocity_error.y() << " : " << velocity_error.z());
+		// ROS_INFO_STREAM("position_component: " << position_component.x() << " : " << position_component.y() << " : " << position_component.z());
 		// ROS_INFO_STREAM("derivative_component: " << derivative_component.x() << " : " << derivative_component.y() << " : " << derivative_component.z());
 		// ROS_INFO_STREAM("integral_component: " << integral_component.x() << " : " << integral_component.y() << " : " << integral_component.z());
 
@@ -106,9 +106,7 @@ namespace ss_workshop{
 
 		// ROS_INFO_STREAM("velocity_error: " << velocity_error_integral.x() << " : " << velocity_error_integral.y() << " : " << velocity_error_integral.z());
 		// ROS_INFO_STREAM("Integral Component: " << velocity_error_integral.cwiseProduct(Ki_p_));
-		ROS_INFO_STREAM("forces: "<< *forces);
-
-
+		// ROS_INFO_STREAM("forces: "<< *forces);
 	}
 
 	void VelController::ComputeDesiredAngularAcc(const Eigen::Vector3d& forces,
@@ -118,7 +116,7 @@ namespace ss_workshop{
 		Eigen::Matrix3d R = odometry_.orientation.toRotationMatrix();
 		Eigen::Matrix3d R_des;
 		double yaw = R.eulerAngles(0,1,2)[2];
-		ROS_INFO_STREAM("yaw: " << yaw);
+		// ROS_INFO_STREAM("yaw: " << yaw);
 		desAttFromForces(forces, 0.0, &R_des);
 
 

@@ -10,14 +10,14 @@ from geometry_msgs.msg import TwistStamped
 class RandomDelayNode:
     def __init__(self):
         self.odom_sub = rospy.Subscriber(
-            "/hummingbird/ground_truth/odometry", Odometry, self.callback_odometry
+            "/pelican/odometry_sensor1/odometry", Odometry, self.callback_odometry
         )
         self.cmd_vel_sub = rospy.Subscriber(
             "/cmd_vel", TwistStamped, self.callback_cmd_vel
         )
         self.odom_pub = rospy.Publisher("/odometry", Odometry, queue_size=10)
         self.cmd_vel_pub = rospy.Publisher(
-            "/mavros/setpoint_attitude/cmd_vel", TwistStamped, queue_size=10
+            "/pelican/vel_msg", TwistStamped, queue_size=10
         )
 
     def callback_odometry(self, msg):
