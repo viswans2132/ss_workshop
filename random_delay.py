@@ -21,18 +21,18 @@ class RandomDelayNode:
         )
 
     def callback_odometry(self, msg):
-        delay = random.uniform(0.1, 2.0)  # Random delay between 0.1 and 2.0 seconds
-        # rospy.loginfo(f"Received message: {msg.data}, delaying for {delay:.2f} seconds")
+        delay = random.uniform(
+            0.005, 0.05
+        )  # Random delay between 0.01 and 0.05 seconds
         time.sleep(delay)
         self.odom_pub.publish(msg)
-        rospy.loginfo(f"Published message: {msg.data} after delay")
 
     def callback_cmd_vel(self, msg):
-        delay = random.uniform(0.1, 2.0)  # Random delay between 0.1 and 2.0 seconds
-        # rospy.loginfo(f"Received message: {msg.data}, delaying for {delay:.2f} seconds")
+        delay = random.uniform(
+            0.005, 0.05
+        )  # Random delay between 0.01 and 0.05 seconds
         time.sleep(delay)
         self.cmd_vel_pub.publish(msg)
-        rospy.loginfo(f"Published message: {msg.data} after delay")
 
 
 if __name__ == "__main__":
