@@ -1,0 +1,14 @@
+material TargetMaterial{
+    technique
+    {
+        pass
+        {
+            texture_unit
+            {
+                texture target_full.png
+                scale 1 1
+            }
+        }   
+    }
+}
+

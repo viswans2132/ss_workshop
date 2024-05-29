@@ -21,6 +21,7 @@ class RandomDelayNode:
         )
 
     def callback_odometry(self, msg):
+<<<<<<< HEAD
         delay = random.uniform(0.00, 0.05)  # Random delay between 0.01 and 0.05 seconds
         delay_secs = int(delay)
         delay_nsecs = int((delay - delay_secs) * 1e9)
@@ -44,6 +45,19 @@ class RandomDelayNode:
             msg.header.stamp.secs -= 1
         msg.header.stamp.secs -= delay_secs
 
+=======
+        delay = random.uniform(
+            0.00, 0.0
+        )  # Random delay between 0.01 and 0.05 seconds
+        time.sleep(delay)
+        self.odom_pub.publish(msg)
+
+    def callback_cmd_vel(self, msg):
+        delay = random.uniform(
+            0.00, 0.0
+        )  # Random delay between 0.01 and 0.05 seconds
+        time.sleep(delay)
+>>>>>>> f1fe65a800e6198127f07f263345ff4da08dd755
         self.cmd_vel_pub.publish(msg)
 
 
