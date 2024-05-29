@@ -7,7 +7,7 @@
   <arg name="log_file" default="$(arg mav_name)" />
   <arg name="debug" default="false"/>
   <arg name="gui" default="true"/>
-  <arg name="paused" default="true"/>
+  <arg name="paused" default="false"/>
   <!-- The following line causes gzmsg and gzerr messages to be printed to the console
       (even when Gazebo is started through roslaunch) -->
   <arg name="verbose" default="false"/>
@@ -40,7 +40,7 @@
     </node>
     
     <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
-    <node name="waypoint_publisher" pkg="rotors_gazebo" type="waypoint_publisher_file" output="screen" args="$(find drone_controller)/resources/waypoints.txt" />
+    <!-- <node name="waypoint_publisher" pkg="rotors_gazebo" type="waypoint_publisher_file" output="screen" args="$(find drone_controller)/resources/waypoints.txt" /> -->
   </group>
 
   <param name="box0_desc" command="$(find xacro)/xacro --inorder '$(find ss_workshop)/models/urdf/box0.xacro' namespace:='box0' mass:=2.0" />  

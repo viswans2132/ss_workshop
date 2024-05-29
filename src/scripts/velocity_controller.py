@@ -16,16 +16,13 @@ class VelocityController:
         self.Kpos = np.array([-0.8, -0.8, -1.5])
         self.Korient = -0.3
 
-        self.odom_sub = rospy.Subscriber("/estimated_odometry", Odometry, self.callback_odometry)
+        self.odom_sub = rospy.Subscriber(
+            "/estimated_odometry", Odometry, self.callback_odometry
+        )
         self.setpoint_sub = rospy.Subscriber(
             "/setpoint_position", Odometry, self.callback_setpoint
         )
-        self.cmd_vel_pub = rospy.Publisher(
-            "/cmd_vel", TwistStamped, queue_size=10
-        )
-
-        # while not rospy.is_shutdown():
-        #     self.vel_sp()
+        self.cmd_vel_pub = rospy.Publisher("/cmd_vel", TwistStamped, queue_size=10)
 
     def callback_odometry(self, msg):
         self.position[0] = msg.pose.pose.position.x
@@ -46,19 +43,12 @@ class VelocityController:
         self.des_orientation[2] = msg.pose.pose.orientation.z
         self.des_orientation[3] = msg.pose.pose.orientation.w
 
-    def vector2Arrays(self, vector):
-        return np.array([vector.x, vector.y, vector.z])
-
     def vel_sp(self):
-        cur_pos = self.position
-        des_pos = self.des_position
-        # cur_orient = self.vector2Arrays(self.orientation)
-        # des_orient = self.vector2Arrays(self.des_orientation)
-        self.error_pos = cur_pos - des_pos
-        # self.error_orient = cur_orient - des_orient
+        self.error_pos = self.position - self.des_position
+        # self.error_orient = self.orientation - self.des_orientation
 
         des_vel = self.Kpos * self.error_pos
-        print(des_vel)
+        # print(self.position, self.des_position, des_vel)
         # desYawVel = self.Korient*self.error_orient[2]
 
         vel_sp = TwistStamped()

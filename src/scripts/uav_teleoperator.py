@@ -52,24 +52,22 @@ class DroneTeleoperator:
                 if self.yaw_angle <= -2 * np.pi:
                     self.yaw_angle = self.yaw_angle + 2 * np.pi
             quat = quaternion_from_euler(0.0, 0.0, self.yaw_angle)
-            # print(self.yaw_angle)
             self.odom.pose.pose.orientation.x = quat[0]
             self.odom.pose.pose.orientation.y = quat[1]
             self.odom.pose.pose.orientation.z = quat[2]
             self.odom.pose.pose.orientation.w = quat[3]
-        except AttributeError:
-            pass
 
-    def run(self):
-        while not rospy.is_shutdown():
             self.odom.header.stamp = rospy.Time.now()
             self.pub.publish(self.odom)
             self.rate.sleep()
+
+        except AttributeError:
+            pass
 
 
 if __name__ == "__main__":
     try:
         controller = DroneTeleoperator()
-        controller.run()
+        rospy.spin()
     except rospy.ROSInterruptException:
         pass
