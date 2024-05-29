@@ -40,7 +40,7 @@
     </node>
     
     <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
-    <!-- <node name="waypoint_publisher" pkg="rotors_gazebo" type="waypoint_publisher_file" output="screen" args="$(find drone_controller)/resources/waypoints.txt" /> -->
+    <node name="waypoint_publisher" pkg="rotors_gazebo" type="waypoint_publisher_file" output="screen" args="$(find drone_controller)/resources/waypoints.txt" />
   </group>
 
   <param name="box0_desc" command="$(find xacro)/xacro --inorder '$(find ss_workshop)/models/urdf/box0.xacro' namespace:='box0' mass:=2.0" />  
