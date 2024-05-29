@@ -49,7 +49,7 @@ class PositionPredictor:
         #     msg.twist.twist.linear.z
         #     + (self.cmd_vel[2] - 9.81) * self.dt  # what is the equilibrium cmd_vel
         # )
-        print("counter:", self.counter, "av.delay:", self.dt, "new.delay:", self.delay)
+        # print("counter:", self.counter, "av.delay:", self.dt, "new.delay:", self.delay)
         self.estimated_odometry.header.stamp = rospy.Time.now()
         self.est_odom_pub.publish(self.estimated_odometry)
 
