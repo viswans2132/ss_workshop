@@ -10,7 +10,7 @@ class PositionPredictor:
     def __init__(self):
         self.delay = 0.0
         self.dt = 0.0
-        self.counter = 1
+        self.counter = 0
         self.cmd_vel = np.array([0.0, 0.0, 0.0])
 
         self.odom_sub = rospy.Subscriber("/odometry", Odometry, self.callback_odometry)
@@ -27,10 +27,11 @@ class PositionPredictor:
         pub_time = msg.header.stamp
         self.delay = (recv_time - pub_time).to_sec()
         if self.counter < 500:  # sliding window of ~5s
-            self.dt = (self.delay + self.dt) / (self.counter)
-            self.counter += self.counter
-        else:
-            self.dt = (self.delay + self.dt - (self.dt / 500)) / 500
+            self.counter = self.counter + 1
+        self.dt = np.divide(self.delay + (self.counter - 1) * self.dt, self.counter)
+        if self.dt > 0.05:
+            self.dt = 0.05
+        # self.dt = 0.0
         self.estimated_odometry = msg
         self.estimated_odometry.pose.pose.position.x = (
             msg.pose.pose.position.x + self.cmd_vel[0] * self.dt
@@ -41,16 +42,17 @@ class PositionPredictor:
         self.estimated_odometry.pose.pose.position.z = (
             msg.pose.pose.position.z + self.cmd_vel[2] * self.dt
         )
-        self.estimated_odometry.twist.twist.linear.x = (
-            msg.twist.twist.linear.x + self.cmd_vel[0] * self.dt
-        )
-        self.estimated_odometry.twist.twist.linear.y = (
-            msg.twist.twist.linear.y + self.cmd_vel[1] * self.dt
-        )
-        self.estimated_odometry.twist.twist.linear.z = (
-            msg.twist.twist.linear.z
-            + (self.cmd_vel[2] - 9.81) * self.dt  # what is the equilibrium cmd_vel
-        )
+        # self.estimated_odometry.twist.twist.linear.x = (
+        #     msg.twist.twist.linear.x + self.cmd_vel[0] * self.dt
+        # )
+        # self.estimated_odometry.twist.twist.linear.y = (
+        #     msg.twist.twist.linear.y + self.cmd_vel[1] * self.dt
+        # )
+        # self.estimated_odometry.twist.twist.linear.z = (
+        #     msg.twist.twist.linear.z
+        #     + (self.cmd_vel[2] - 9.81) * self.dt  # what is the equilibrium cmd_vel
+        # )
+        # print("counter:", self.counter, "av.delay:", self.dt, "new.delay:", self.delay)
         self.estimated_odometry.header.stamp = rospy.Time.now()
         self.est_odom_pub.publish(self.estimated_odometry)
 

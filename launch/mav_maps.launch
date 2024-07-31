@@ -1,0 +1,93 @@
+<launch>
+  <arg name="mav_name" default="pelican"/>
+  <arg name="controller_name" default="vel"/>
+  <arg name="world_name" default="basic"/>
+  <arg name="enable_logging" default="false" />
+  <arg name="enable_ground_truth" default="true" />
+  <arg name="log_file" default="$(arg mav_name)" />
+  <arg name="debug" default="false"/>
+  <arg name="gui" default="true"/>
+  <arg name="paused" default="true"/>
+  <!-- The following line causes gzmsg and gzerr messages to be printed to the console
+      (even when Gazebo is started through roslaunch) -->
+  <arg name="verbose" default="false"/>
+
+  <env name="GAZEBO_MODEL_PATH" value="${GAZEBO_MODEL_PATH}:$(find rotors_gazebo)/models:$(find ss_workshop)/models"/>
+  <env name="GAZEBO_RESOURCE_PATH" value="${GAZEBO_RESOURCE_PATH}:$(find ss_workshop)/worlds:$(find rotors_gazebo)/resource:$(find rotors_gazebo)/models:$(find ss_workshop)/resources:$(find ss_workshop)/models"/>
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find rotors_gazebo)/worlds/$(arg world_name).world" />
+    <arg name="debug" value="$(arg debug)" />
+    <arg name="paused" value="$(arg paused)" />
+    <arg name="gui" value="$(arg gui)" />
+    <arg name="verbose" value="$(arg verbose)"/>
+  </include>
+
+
+  <group ns="$(arg mav_name)">
+    <include file="$(find rotors_gazebo)/launch/spawn_mav.launch">
+      <arg name="mav_name" value="$(arg mav_name)" />
+      <arg name="model" value="$(find rotors_description)/urdf/mav_generic_odometry_sensor.gazebo" />
+      <arg name="enable_logging" value="$(arg enable_logging)" />
+      <arg name="enable_ground_truth" value="$(arg enable_ground_truth)" />
+      <arg name="log_file" value="$(arg log_file)"/>
+    </include>
+
+     <node name="onboard_controller_node" pkg="ss_workshop" type="ss_$(arg controller_name)_node" output="screen">      
+      <rosparam command="load" file="$(find ss_workshop)/resources/$(arg controller_name)_$(arg mav_name).yaml" />
+      <rosparam command="load" file="$(find rotors_gazebo)/resource/$(arg mav_name).yaml" />
+      <remap from="odom_msg" to="odometry_sensor1/odometry" />
+      <remap from="traj_msg" to="command/trajectory" />      
+    </node>
+    
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+  </group>
+
+  <param name="target_desc" command="$(find xacro)/xacro --inorder '$(find ss_workshop)/models/urdf/target.xacro' namespace:='target' mass:=0.2" />
+  <node name="spawn_target" pkg="gazebo_ros" type="spawn_model"
+   args="-param target_desc
+         -urdf
+         -x 8.75
+         -y -6.42
+         -z 0.1
+         -model 'target'"
+   respawn="false" output="screen">
+  </node>
+  
+  <!-- <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" /> -->
+
+  <param name="pipe1_desc" command="$(find xacro)/xacro --inorder '$(find ss_workshop)/models/urdf/pipe.xacro' 
+    namespace:='pipe1' altitude:=0.85 yaw:=0.0" />  
+  <param name="pipe2_desc" command="$(find xacro)/xacro --inorder '$(find ss_workshop)/models/urdf/pipe.xacro' 
+    namespace:='pipe2' altitude:=0.85 yaw:=0.8" />  
+  <param name="pipe3_desc" command="$(find xacro)/xacro --inorder '$(find ss_workshop)/models/urdf/pipe.xacro' 
+    namespace:='pipe3' altitude:=0.85 yaw:=1.57" />  
+  <node name="spawn_pipe1" pkg="gazebo_ros" type="spawn_model"
+   args="-param pipe1_desc
+         -urdf
+         -x -1.0
+         -y 0.0
+         -z 0.1
+         -model 'pipe1'"
+   respawn="false" output="screen">
+  </node>
+  <node name="spawn_pipe2" pkg="gazebo_ros" type="spawn_model"
+   args="-param pipe2_desc
+         -urdf
+         -x 0.96
+         -y -4.61
+         -z 0.1
+         -model 'pipe2'"
+   respawn="false" output="screen">
+  </node>
+  <node name="spawn_pipe3" pkg="gazebo_ros" type="spawn_model"
+   args="-param pipe3_desc
+         -urdf
+         -x 5.66
+         -y -6.42
+         -z 0.1
+         -model 'pipe3'"
+   respawn="false" output="screen">
+  </node>
+
+
+</launch>

@@ -1,0 +1,9 @@
+actuator_enabled: true
+drone: {
+  mass: "1.05, 0.01, 0.01, 0.02"
+}
+control: {
+  Ki_p: "0.0, 0.0, 0.0",
+  Kp_q: "1.0, 1.0, 0.1",
+  Kd_q: "0.22, 0.22, 0.03"
+}
