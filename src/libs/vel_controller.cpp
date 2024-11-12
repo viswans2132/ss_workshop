@@ -115,21 +115,24 @@ namespace ss_workshop{
 
 		Eigen::Matrix3d R = odometry_.orientation.toRotationMatrix();
 		Eigen::Matrix3d R_des;
-		double yaw = R.eulerAngles(0,1,2)[2];
-		ROS_INFO_STREAM("yaw: " << yaw);
-		desAttFromForces(forces, 0.0, &R_des);
+		// double yaw = R.eulerAngles(0,1,2)[2];
+		Eigen::Vector4d q = odometry_.orientation.coeffs();
+		double yaw = atan2(2*(q[0]*q[1] + q[2]*q[3]), (1 - 2*(q[2]*q[2] + q[1]*q[1])));
+		// ROS_INFO_STREAM("yaw: " << std::fixed << std::setprecision(2) << R.eulerAngles(0,1,2)[0] << " : " << R.eulerAngles(0,1,2)[1] << " : " << R.eulerAngles(0,1,2)[2]);
+		// ROS_INFO_STREAM("yaw: " << std::fixed << std::setprecision(2) << yaw);
+		desAttFromForces(forces, yaw, &R_des);
 
 
 		// Angle error according to pid et al.
 		Eigen::Matrix3d angle_error_matrix = 0.5 * (R_des.transpose() * R - R.transpose() * R_des);
 		Eigen::Vector3d angle_error;
 		vectorFromSkewMatrix(angle_error_matrix, &angle_error);
-		angle_error[2] = 0;
+		// angle_error[2] = 0;
 
 		// TODO(burrimi) include angular rate references at some point.
 		Eigen::Vector3d angular_rate_des(Eigen::Vector3d::Zero());
 		angular_rate_des[2] = com_yaw_rate_;
-		ROS_INFO_STREAM("Angle Error: " << angle_error);
+		// ROS_INFO_STREAM("Angle Error: " << angle_error);
 
 		Eigen::Vector3d angular_rate_error = odometry_.angular_velocity - R_des.transpose() * R * angular_rate_des;
 
