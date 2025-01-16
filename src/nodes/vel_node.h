@@ -8,6 +8,7 @@
 #include <Eigen/Eigen>
 #include <stdio.h>
 
+#include <std_msgs/Int8.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
@@ -55,7 +56,7 @@ namespace ss_workshop{
 
 		ros::Subscriber odom_sub_;
 		ros::Subscriber pose_sub_;
-		ros::Subscriber traj_sub_;
+		ros::Subscriber land_sub_;
 		ros::Subscriber vel_sub_;
 		ros::Subscriber mavState_sub_;
 
@@ -82,6 +83,7 @@ namespace ss_workshop{
 		void OdomCallback(const nav_msgs::OdometryConstPtr& msg);
 		// void TrajCallback(const trajectory_msgs::MultiDOFJointTrajectoryConstPtr& msg);
 		void VeloCallback(const geometry_msgs::TwistStampedConstPtr& msg);
+		void LandCallback(const std_msgs::Int8ConstPtr& msg);
 
 		// void ComCallback(const ros::TimerEvent &e);
 		void PubCallback(const ros::TimerEvent &e);

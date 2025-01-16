@@ -73,7 +73,7 @@ class VelocityController:
         self.error_pos = self.position - self.des_position
         # self.error_orient = self.orientation - self.des_orientation
 
-        # print(["Err: ", self.error_pos])
+        print(["Err: ", self.error_pos])
 
         des_vel = self.Kpos * self.error_pos
         # print(["Vel: ", des_vel])

@@ -18,6 +18,7 @@ namespace ss_workshop{
 		void setVelo(Eigen::Vector4d* com_traj);
 		// void setOdometryFromPose(const geometric_msgs::Pose& pose);
 		void setOdometry(const EigenOdometry& odom);
+		void disableControl();
 
 		Eigen::Vector3d Kp_p_;
 		Eigen::Vector3d Kv_p_;

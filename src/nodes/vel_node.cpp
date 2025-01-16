@@ -12,6 +12,8 @@ namespace ss_workshop{
                             &VelNode::OdomCallback, this);
 		// traj_sub_ = nh_.subscribe("traj_msg", 1, 
   //                           &VelNode::TrajCallback, this);
+		land_sub_ = nh_.subscribe("land_signal", 1, 
+                            &VelNode::LandCallback, this);
 		vel_sub_ = nh_.subscribe("vel_msg", 1, 
                             &VelNode::VeloCallback, this);
 		mavState_sub_ = nh_.subscribe("mavros/state", 1, 
@@ -84,6 +86,11 @@ namespace ss_workshop{
 		// ROS_INFO_STREAM(msg->twist.linear.z);	
 		vel_yaw_rate << msg->twist.linear.x, msg->twist.linear.y, msg->twist.linear.z, msg->twist.angular.z;
 		position_controller_.setVelo(&vel_yaw_rate);
+	}
+
+	void VelNode::LandCallback(const std_msgs::Int8ConstPtr& msg){
+		ROS_INFO_ONCE("Received landing signal");
+		position_controller_.disableControl();
 	}
 
 	// void VelNode::TrajCallback(const trajectory_msgs::MultiDOFJointTrajectoryConstPtr& msg){

@@ -174,6 +174,10 @@ namespace ss_workshop{
 		odometry_ = odometry;
 	}
 
+	void VelController::disableControl(){
+		controller_active_ = false;
+	}
+
 	void VelController::setVelo(Eigen::Vector4d* vel_yaw) {
 		// ROS_INFO_STREAM("vel" << vel_yaw->z());
 		com_vel_ << vel_yaw->x(), vel_yaw->y(), vel_yaw->z();
