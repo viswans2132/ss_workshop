@@ -4,7 +4,7 @@
 
   <xacro:arg name="mass" default="100" />
   <xacro:arg name="yaw" default="1.6" />
-  <xacro:arg name="radius" default="0.5" />
+  <xacro:arg name="radius" default="1.2" />
   <xacro:arg name="thickness" default="5.0" />
   <xacro:arg name="altitude" default="1.5" />
 

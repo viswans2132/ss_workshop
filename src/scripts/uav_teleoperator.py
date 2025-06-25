@@ -15,8 +15,8 @@ class DroneTeleoperator:
         self.odom.header.frame_id = "base_link"
 
         # Set initial positions
-        self.odom.pose.pose.position.x = 0.0
-        self.odom.pose.pose.position.y = 0.0
+        self.odom.pose.pose.position.x = -1.0
+        self.odom.pose.pose.position.y = -1.0
         self.odom.pose.pose.position.z = 1.0
         self.yaw_angle = 0.0
         self.odom.pose.pose.orientation.x = 0.0

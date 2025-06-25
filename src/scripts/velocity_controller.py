@@ -11,7 +11,7 @@ class VelocityController:
     def __init__(self):
         self.position = np.array([0.0, 0.0, 0.0])
         self.orientation = np.array([0.0, 0.0, -0.707, 0.707])
-        self.des_position = np.array([0.0, 0.0, 0.5])
+        self.des_position = np.array([0.0, 0.0, 1.5])
         self.des_orientation = np.array([0.0, 0.0, 0.0, 0.0])
         self.error_pos = np.array([0.0, 0, 0])
         self.Kpos = np.array([-2.8, -2.8, -1.5])
