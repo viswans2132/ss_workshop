@@ -1,7 +1,6 @@
-actuator_enabled: true
-drone: {
-  mass_inertia: "1.0, 0.01, 0.01, 0.02"
-}
+# Pelican vehicle parameters
+mass: 1.0
+inertia: {xx: 0.01, xy: 0.0, xz: 0.0, yy: 0.01, yz: 0.0, zz: 0.02}
 
 # angle should be expressed in rad
 # direction 1 means counter clockwise, -1 clockwise
@@ -11,28 +10,3 @@ rotor_configuration:
   '1': {angle: 1.57079632679, arm_length: 0.21, rotor_force_constant: 9.9865e-06, rotor_moment_constant: 1.6e-2, direction: 1.0}
   '2': {angle: 3.14159265359, arm_length: 0.21, rotor_force_constant: 9.9865e-06, rotor_moment_constant: 1.6e-2, direction: -1.0}
   '3': {angle: -1.57079632679, arm_length: 0.21, rotor_force_constant: 9.9865e-06, rotor_moment_constant: 1.6e-2, direction: 1.0}
-
-control: {
-  Kp_p: "7.0, 7.0, 7.0",
-  Kv_p: "1.0, 1.0, 1.0",
-  Ki_p: "1.3, 1.3, 1.5",
-
-  Kp_q: "1.0, 1.0, 0.035",
-  Kv_q: "0.22, 0.22, 0.01",
-
-  max_thrust: 20.0
-}
-
-
-
-# control: {
-#   Kp_p: "2.0, 2.0, 2.0",
-#   Kv_p: "0.0, 0.0, 0.0",
-#   Ki_p: "0.2, 0.2, 1.0",
-
-#   Kp_q: "1.0, 1.0, 0.035",
-#   Kv_q: "0.22, 0.22, 0.01",
-
-#   max_thrust: 5.0
-# }
-

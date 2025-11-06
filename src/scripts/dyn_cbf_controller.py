@@ -23,7 +23,7 @@ class VelocityController:
         self.cons = np.array([])
 
         self.odom_sub = rospy.Subscriber(
-            "/pelican/odometry_sensor1/odometry", Odometry, self.callback_odometry
+            "/shafter4/odometry_sensor1/odometry", Odometry, self.callback_odometry
         )
         self.setpoint_sub = rospy.Subscriber(
             "/setpoint_position", Odometry, self.callback_setpoint
@@ -31,7 +31,7 @@ class VelocityController:
         self.ellipse_sub = rospy.Subscriber(
             "/marker/ellipses", MarkerArray, self.callback_constraints
             )
-        self.cmd_vel_pub = rospy.Publisher("/pelican/vel_msg", TwistStamped, queue_size=10)
+        self.cmd_vel_pub = rospy.Publisher("/shafter4/vel_msg", TwistStamped, queue_size=10)
 
     def callback_odometry(self, msg):
         self.position[0] = msg.pose.pose.position.x
