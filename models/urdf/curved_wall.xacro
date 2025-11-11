@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="s_wall">
+
+  <!-- Properties -->
+  <xacro:property name="mesh_scale" value="1.001 1.001 1.001"/> <!-- mm → m -->
+  <xacro:property name="mesh_path" value="package://ss_workshop/worlds/s_shaped_wall/meshes/s_shaped_wall.stl"/>
+
+  <!-- Base link with STL -->
+  <link name="s_wall">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="${mesh_path}" scale="${mesh_scale}"/>
+      </geometry>
+      <material name="grayTransparent">
+        <color rgba="0.6 0.6 0.6 0.4"/>
+      </material>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="${mesh_path}" scale="${mesh_scale}"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <mass value="100.0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="104.2" iyy="1083.3" izz="850.0"
+               ixy="0.0" ixz="0.0" iyz="0.0"/>
+    </inertial>
+  </link>
+  <gazebo reference="s_wall">
+    <static>true</static>
+    <material>Gazebo/BlueTransparent</material>    
+  </gazebo>
+
+
+
+</robot>
+

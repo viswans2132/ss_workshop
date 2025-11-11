@@ -1,0 +1,27 @@
+<?xml version="1.0" ?>
+<sdf version="1.7">
+  <model name="s_shaped_wall">
+    <static>true</static>
+    <link name="wall_link">
+      <!-- Visual -->
+      <visual name="wall_visual">
+        <geometry>
+          <mesh>
+            <uri>model://meshes/s_shaped_wall.stl</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+
+      <!-- Collision -->
+      <collision name="wall_collision">
+        <geometry>
+          <mesh>
+            <uri>model://meshes/s_shaped_wall.stl</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+  </model>
+</sdf>
