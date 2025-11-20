@@ -4,6 +4,7 @@ import rospy
 import os
 import sys
 import math
+import time
 import numpy as np
 import numpy.linalg as la
 import cvxpy as cp
@@ -86,6 +87,10 @@ class CbfVelocityController:
         self._constraints_active = False   # Flag to check if obstacle constraints are present
         self._stop_command_received = False # Flag: True to force zero velocity
 
+        print("Sleeping")
+        time.sleep(1)
+
+
         # Start the main control loop
         self.control_loop()
 
@@ -150,8 +155,7 @@ class CbfVelocityController:
         goal_msg = Twist()
 
         # --- 1. Angular Control (Heading) ---
-        yaw_sp = np.arctan2(position_error[1], position_error[0])
-        yaw_error = yaw_sp - self._current_yaw
+        yaw_error = self._desired_yaw - self._current_yaw
         
         # Normalize the angular error to be between -pi and pi
         yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi 
