@@ -9,14 +9,18 @@ import sensor_msgs.point_cloud2 as pc2
 from sensor_msgs.msg import PointCloud2, PointField
 from tf.transformations import euler_from_quaternion, quaternion_matrix
 import matplotlib.cm as cm
+import argparse
 
 
 class VelocityController:
-	def __init__(self):
+	def __init__(self, namespace, startFlag):
+		self.namespace = namespace
+		self.startFlag = startFlag
+
 		self.position = np.array([0.0, 0.0, 1.0])
 		self.orientation = np.array([0.0, 0.0, 0.0, 1.0])
 		self.yaw = 0.0
-		self.des_position = np.array([-1.0, -1.0, 0.0])
+		self.des_position = np.array([-1.0, -1.0, 1.0])
 		self.pos_sp = np.array([-1.0, -1.0, 1.0])
 		self.des_orientation = np.array([0.0, 0.0, 0.0, 1.0])
 		self.des_yaw = 0.0
@@ -33,20 +37,20 @@ class VelocityController:
 		self.b = np.array([])
 		self.consFlag = False
 		self.odomFlag = False
-		self.controlFlag = False
+		self.controlFlag = self.startFlag
 
 		self.odom_sub = rospy.Subscriber(
-		    "/shafter4/odometry_sensor1/odometry", Odometry, self.callback_odometry
+		    f"/{self.namespace}/odometry_sensor1/odometry", Odometry, self.callback_odometry
 		)
 		self.odom_setpoint_sub = rospy.Subscriber(
 		    "/setpoint_position", Odometry, self.sp_odom_callback
 		)
 		self.posestamped_setpoint_sub = rospy.Subscriber(
-		    "/shafter4/command/pose", PoseStamped, self.sp_pose_sta_callback
+		    f"/{self.namespace}/command/pose", PoseStamped, self.sp_pose_sta_callback
 		)
-		self.laser_sub =  rospy.Subscriber("/shafter4/velodyne_points", PointCloud2, self.pointcloud_callback)
+		self.laser_sub =  rospy.Subscriber(f"/{self.namespace}/velodyne_points", PointCloud2, self.pointcloud_callback)
 
-		self.cmd_vel_pub = rospy.Publisher("/shafter4/vel_msg", TwistStamped, queue_size=10)
+		self.cmd_vel_pub = rospy.Publisher(f"/{self.namespace}/vel_msg", TwistStamped, queue_size=10)
 		self.laser_pub = rospy.Publisher("/reduced_points", PointCloud2, queue_size=10)
 
 
@@ -271,5 +275,12 @@ class VelocityController:
 
 if __name__ == "__main__":
 	rospy.init_node("wall_cbf_node", anonymous=True)
-	node = VelocityController()
+	parser = argparse.ArgumentParser(description="Namespace")
+	parser.add_argument("--namespace", type=str, default="pelican", help="Specify a namespace. Defaults to <pelican>")
+	parser.add_argument("--startFlag", action='store_true', default="False", help="Prevents the controller from starting automatically. Defaults to <False>")
+
+	args = parser.parse_args()
+	startFlag = args.startFlag
+
+	node = VelocityController(args.namespace, args.startFlag)
 	rospy.spin()
