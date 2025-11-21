@@ -48,7 +48,7 @@ class CbfVelocityController:
             
         # TOPIC CHANGE: pointcloud -> velodyne_points
         self._pcl_subscriber = rospy.Subscriber(
-            f"{namespace}/velodyne_points", PointCloud2, self.pointcloud_callback, queue_size=1)
+            f"{namespace}/ouster/points", PointCloud2, self.pointcloud_callback, queue_size=1)
             
         # TOPIC CHANGE: setpoint_pose -> command/pose
         self._setpoint_subscriber = rospy.Subscriber(
@@ -59,7 +59,7 @@ class CbfVelocityController:
             f"{namespace}/stop", String, self.stop_command_callback, queue_size=1)
         
         # Time period (used for rospy.Rate)
-        self._control_dt = 0.2  # seconds
+        self._control_dt = 0.1  # seconds
         self._rate = rospy.Rate(1.0 / self._control_dt) 
         self._start_time = rospy.get_time()
 
@@ -160,7 +160,7 @@ class CbfVelocityController:
         # Normalize the angular error to be between -pi and pi
         yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi 
 
-        goal_msg.angular.z = np.clip(0.5 * yaw_error, -0.5, 0.5)
+        goal_msg.angular.z = np.clip(0.5 * yaw_error, -0.2, 0.2)
 
         # --- 2. Linear Control (Nominal Velocity) ---
         # Rotation matrix from World Frame to Robot Frame (only 2D part needed for velocity transform)
@@ -185,8 +185,8 @@ class CbfVelocityController:
         u_filtered_robot_frame = R_world_to_robot @ u_filtered_world
         
         # Apply clamping to output velocities
-        goal_msg.linear.x = np.clip(u_filtered_robot_frame[0], -0.3, 0.3)
-        goal_msg.linear.y = np.clip(u_filtered_robot_frame[1], -0.3, 0.3)
+        goal_msg.linear.x = np.clip(u_filtered_robot_frame[0], -0.8, 0.8)
+        goal_msg.linear.y = np.clip(u_filtered_robot_frame[1], -0.8, 0.8)
             
         self._velocity_publisher.publish(goal_msg)
         rospy.loginfo('Command: Linear X: {:.2f}, Linear Y: {:.2f}, Angular Z: {:.2f}'.format(
@@ -296,9 +296,11 @@ class CbfVelocityController:
         # 1. Distance filter (points must be within 2.5m)
         distances = np.linalg.norm(points, axis=1)
         points = points[distances <= 2.5]
+        distances = distances[distances <=2.5]
+        points = points[distances >= 0.8]
 
         # 2. Voxel Grid downsampling
-        voxel_size = 0.5
+        voxel_size = 0.3
         discrete_coords = np.floor(points / voxel_size).astype(np.int32)
         _, unique_indices = np.unique(discrete_coords, axis=0, return_index=True)
         points = points[unique_indices]
@@ -352,10 +354,10 @@ class CbfVelocityController:
             A_elevated = -2 * elevated_points[:, :2] # N x 2 matrix
             
             # h_elevated = ||P_i||_XY^2 - r^2. Safety radius r=0.5m.
-            h_elevated = np.sum(elevated_points[:,:2]**2, axis=1) - 0.5**2 
+            h_elevated = np.sum(elevated_points[:,:2]**2, axis=1) - 1.5**2 
             
             # b_i = -gamma * h(x). gamma = 3.1
-            b_elevated = -3.1 * h_elevated 
+            b_elevated = -0.4 * h_elevated 
 
             A_list.append(A_elevated)
             b_list.append(b_elevated)
@@ -369,7 +371,7 @@ class CbfVelocityController:
 
             pcl_msg = PointCloud2()
             pcl_msg.header.stamp = rospy.Time.now()
-            pcl_msg.header.frame_id = "world"
+            pcl_msg.header.frame_id = "spot/odom"
 
             # Color points based on magnitude (for visualization only)
             magn = 1*(np.sum(elevated_points**2, 1) - 1.0)
