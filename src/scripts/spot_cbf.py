@@ -57,6 +57,8 @@ class CbfVelocityController:
         # MESSAGE & TOPIC CHANGE: stop_command -> stop, Bool -> String
         self._stop_subscriber = rospy.Subscriber(
             f"{namespace}/stop", String, self.stop_command_callback, queue_size=1)
+
+        # self._control_status_server = rospy.Service(f"{namespace}/control_status", ControlStatus, self.return_control_status)
         
         # Time period (used for rospy.Rate)
         self._control_dt = 0.1  # seconds
@@ -86,6 +88,7 @@ class CbfVelocityController:
         self._setpoint_received = autostart # Flag is true if autostart arg is used
         self._constraints_active = False   # Flag to check if obstacle constraints are present
         self._stop_command_received = False # Flag: True to force zero velocity
+        self._control_status = True # Flag to indicate to the service client about the status of the controller
 
         print("Sleeping")
         time.sleep(1)
@@ -213,6 +216,8 @@ class CbfVelocityController:
         except ValueError:
             rospy.logerr("Constraint matrices have incompatible dimensions.")
             u = np.array([0.0, 0.0])
+
+        if la.norm(u_nominal) > 0.1 and la.norm(u)
 
         try:
             return np.array([u[0], u[1]])
@@ -397,6 +402,18 @@ class CbfVelocityController:
             self.A = np.zeros((1, 2))
             self.b = np.array([-1000.0])
             self._constraints_active = False 
+
+    def handle_control_status(self, req):
+        """
+        The callback function executed when the service is called.
+        
+        It takes the request object (req) and returns a response object
+        (status of the control output).
+        """
+        rospy.loginfo(f"Control Status: {self._control_status}")
+        # response = ControlStatusResponse()
+        # response.status = self._control_status
+        # return response
 
 
 def main():
