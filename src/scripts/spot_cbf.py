@@ -188,7 +188,7 @@ class CbfVelocityController:
         goal_msg.linear.x = np.clip(u_filtered_robot_frame[0], -0.3, 0.3)
         goal_msg.linear.y = np.clip(u_filtered_robot_frame[1], -0.3, 0.3)
             
-        # self._velocity_publisher.publish(goal_msg)
+        self._velocity_publisher.publish(goal_msg)
         rospy.loginfo('Command: Linear X: {:.2f}, Linear Y: {:.2f}, Angular Z: {:.2f}'.format(
             goal_msg.linear.x, goal_msg.linear.y, goal_msg.angular.z))
 
@@ -361,7 +361,7 @@ class CbfVelocityController:
             b_list.append(b_elevated)
             
             # --- Visualization ---
-            translated_points = rotated_points + self._current_position
+            translated_points = elevated_points + self._current_position
             fields = [PointField('x', 0, PointField.FLOAT32, 1), 
                       PointField('y', 4, PointField.FLOAT32, 1), 
                       PointField('z', 8, PointField.FLOAT32, 1), 
