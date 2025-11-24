@@ -90,6 +90,9 @@ class CbfVelocityController:
         self._stop_command_received = False # Flag: True to force zero velocity
         self._control_status = True # Flag to indicate to the service client about the status of the controller
 
+        self._filter_semi_major = 0.3
+        self._filter_semi_minor = 0.2
+
         print("Sleeping")
         time.sleep(1)
 
@@ -105,7 +108,7 @@ class CbfVelocityController:
         zero_msg.angular.z = 0.0
         self._velocity_publisher.publish(zero_msg)
 
-    def _check_control_state_and_stop(self, position_error):
+    def _check_control_state_and_stop(self, position_error, yaw_error):
         """
         Checks all conditions that require the robot to stop or skip control logic.
         Publishes zero velocity if any stop condition is met.
@@ -125,7 +128,7 @@ class CbfVelocityController:
             return True
         
         # 3. Goal Reached Check
-        if la.norm(position_error) < 0.03: # Threshold of 10 cm
+        if la.norm(position_error) < 0.2 and np.abs(yaw_error) < 0.05: # Threshold of 10 cm
             rospy.loginfo_throttle(1.0, "Goal reached! Holding position.")
             self._publish_zero_velocity()
             return True
@@ -148,20 +151,20 @@ class CbfVelocityController:
         Timed callback function to compute and publish velocity commands.
         """
         position_error = self._desired_position[:2] - self._current_position[:2]
+        # --- 1. Angular Control (Heading) ---
+        yaw_error = self._desired_yaw - self._current_yaw
+        
+        # Normalize the angular error to be between -pi and pi
+        yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi 
         
         # Check all stop/skip conditions (Emergency Stop, Missing Data, Goal Reached).
-        if self._check_control_state_and_stop(position_error):
+        if self._check_control_state_and_stop(position_error, yaw_error):
             return 
             
         # --- Control Logic (only runs if checks above pass) ---
         
         goal_msg = Twist()
 
-        # --- 1. Angular Control (Heading) ---
-        yaw_error = self._desired_yaw - self._current_yaw
-        
-        # Normalize the angular error to be between -pi and pi
-        yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi 
 
         goal_msg.angular.z = np.clip(0.5 * yaw_error, -0.2, 0.2)
 
@@ -186,6 +189,9 @@ class CbfVelocityController:
         # --- 5. Transform and Publish ---
         # Project World Frame velocity (u_filtered_world) into Robot Frame
         u_filtered_robot_frame = R_world_to_robot @ u_filtered_world
+
+        if la.norm(u_filtered_robot_frame) < 0.03:
+            u_filtered_robot_frame = 0.0*u_filtered_robot_frame
         
         # Apply clamping to output velocities
         goal_msg.linear.x = np.clip(u_filtered_robot_frame[0], -0.8, 0.8)
@@ -297,21 +303,36 @@ class CbfVelocityController:
 
         # Convert the list of points to a NumPy array
         points = np.array(points)
+        shifted_points = np.array([points[:, 0] + 0.25, points[:, 1], points[:,2]]).T
 
-        # 1. Distance filter (points must be within 2.5m)
-        distances = np.linalg.norm(points, axis=1)
-        points = points[distances <= 2.5]
-        distances = distances[distances <=2.5]
-        points = points[distances >= 0.8]
+        # ellipse_mask = (shifted_points[:,0]**2 / self._filter_semi_major**2) + (shifted_points[:,1]**2 / self._filter_semi_minor**2) > 1
+        # shifted_points = shifted_points[ellipse_mask]
+        rect_mask = ((shifted_points[:, 0] > 0.3) | (shifted_points[:, 0] < -0.3)) | ((shifted_points[:, 1] > 0.2) | (shifted_points[:, 0] < -0.2)) 
+        # print(rect_mask.shape)
+
+        shifted_points = shifted_points[rect_mask]
+
+        
+        distance_mask = la.norm(shifted_points, axis=1) < 2.5
+        shifted_points = shifted_points[distance_mask]
+
+
+        # # 1. Distance filter (points must be within 2.5m)
+        # distances = np.linalg.norm(points, axis=1)
+        # points = points[distances <= 2.5]
+        # distances = distances[distances <=2.5]
+        # points = points[distances >= 0.8]
+        # ellipse_mask = (shifted_x**2 / a**2) + (shifted_y**2 / b**2) >= 1
 
         # 2. Voxel Grid downsampling
-        voxel_size = 0.3
+        voxel_size = 0.1
         discrete_coords = np.floor(points / voxel_size).astype(np.int32)
         _, unique_indices = np.unique(discrete_coords, axis=0, return_index=True)
         points = points[unique_indices]
         
         # Store processed points (N x 3)
-        self.points_array = np.array([points[:,0] + 0.4, points[:,1], points[:,2]]).T
+        # self.points_array = np.array([points[:,0], points[:,1], points[:,2]]).T
+        self.points_array = shifted_points
 
         # Check constraint feasibility
         if len(self.points_array) < 1:
@@ -359,7 +380,7 @@ class CbfVelocityController:
             A_elevated = -2 * elevated_points[:, :2] # N x 2 matrix
             
             # h_elevated = ||P_i||_XY^2 - r^2. Safety radius r=0.5m.
-            h_elevated = np.sum(elevated_points[:,:2]**2, axis=1) - 0.85**2 
+            h_elevated = np.sum(elevated_points[:,:2]**2, axis=1) - 0.5**2 
             
             # b_i = -gamma * h(x). gamma = 3.1
             b_elevated = -0.4 * h_elevated 
@@ -376,12 +397,12 @@ class CbfVelocityController:
 
             pcl_msg = PointCloud2()
             pcl_msg.header.stamp = rospy.Time.now()
-            pcl_msg.header.frame_id = "spot/odom"
+            pcl_msg.header.frame_id = "odom"
 
             # Color points based on magnitude (for visualization only)
             magn = 1*(np.sum(elevated_points**2, 1) - 1.0)
-            magn_normalized = (magn - magn.min())/(magn.max() - magn.min() + 0.0001)
-            color_map = cm.get_cmap('viridis') 
+            magn_normalized = 1-(magn - magn.min())/(magn.max() - magn.min() + 0.0001)
+            color_map = cm.get_cmap('magma') 
             colors = (color_map(magn_normalized)[:,:3]*255).astype(np.uint8)
             rgb_uint32 = (colors[:, 0].astype(np.uint32) << 16) | \
                          (colors[:, 1].astype(np.uint32) << 8) | \
