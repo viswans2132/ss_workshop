@@ -125,7 +125,7 @@ class CbfVelocityController:
             return True
         
         # 3. Goal Reached Check
-        if la.norm(position_error) < 0.1: # Threshold of 10 cm
+        if la.norm(position_error) < 0.03: # Threshold of 10 cm
             rospy.loginfo_throttle(1.0, "Goal reached! Holding position.")
             self._publish_zero_velocity()
             return True
@@ -217,7 +217,7 @@ class CbfVelocityController:
             rospy.logerr("Constraint matrices have incompatible dimensions.")
             u = np.array([0.0, 0.0])
 
-        if la.norm(u_nominal) > 0.1 and la.norm(u)
+        # if la.norm(u_nominal) > 0.1 and la.norm(u)
 
         try:
             return np.array([u[0], u[1]])
@@ -311,7 +311,7 @@ class CbfVelocityController:
         points = points[unique_indices]
         
         # Store processed points (N x 3)
-        self.points_array = np.array([points[:,0], points[:,1], points[:,2]]).T
+        self.points_array = np.array([points[:,0] + 0.4, points[:,1], points[:,2]]).T
 
         # Check constraint feasibility
         if len(self.points_array) < 1:
@@ -359,7 +359,7 @@ class CbfVelocityController:
             A_elevated = -2 * elevated_points[:, :2] # N x 2 matrix
             
             # h_elevated = ||P_i||_XY^2 - r^2. Safety radius r=0.5m.
-            h_elevated = np.sum(elevated_points[:,:2]**2, axis=1) - 1.5**2 
+            h_elevated = np.sum(elevated_points[:,:2]**2, axis=1) - 0.85**2 
             
             # b_i = -gamma * h(x). gamma = 3.1
             b_elevated = -0.4 * h_elevated 
