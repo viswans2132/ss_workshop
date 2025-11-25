@@ -93,6 +93,8 @@ class CbfVelocityController:
 
         self._filter_semi_major = 0.3
         self._filter_semi_minor = 0.2
+        self._max_speed = 1.0
+        self._min_speed = 0.03
 
         print("Sleeping")
         time.sleep(1)
@@ -169,7 +171,7 @@ class CbfVelocityController:
 
 
         u_yaw = np.clip(0.5 * yaw_error, -0.2, 0.2)
-        goal_msg.linear.z = u_yaw
+        goal_msg.angular.z = u_yaw
 
         # --- 2. Linear Control (Nominal Velocity) ---
         # Rotation matrix from World Frame to Robot Frame (only 2D part needed for velocity transform)
