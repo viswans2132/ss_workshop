@@ -21,7 +21,7 @@ import sensor_msgs.point_cloud2 as pc2
 import matplotlib.cm as cm
 # Utility for Quaternion to Matrix/Euler conversion (tf_transformations or equivalent is needed)
 from tf.transformations import quaternion_matrix, euler_from_quaternion 
-from ss_worshop.srv import ControlStatus
+from ss_workshop.srv import ControlStatus
 
 # Define a class for the CBF Velocity Controller node
 class CbfVelocityController:
