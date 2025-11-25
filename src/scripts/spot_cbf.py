@@ -21,11 +21,11 @@ import sensor_msgs.point_cloud2 as pc2
 import matplotlib.cm as cm
 # Utility for Quaternion to Matrix/Euler conversion (tf_transformations or equivalent is needed)
 from tf.transformations import quaternion_matrix, euler_from_quaternion 
-from ss_workshop.srv import ControlStatus
+from ss_workshop.srv import ControlStatus, ControlStatusResponse
 
 # Define a class for the CBF Velocity Controller node
 class CbfVelocityController:
-    def __init__(self, namespace='', autostart=False):
+    def __init__(self, namespace='', autostart=False, max_speed=1.0):
         # 1. ROS 1 Node Initialization
         rospy.init_node('cbf_velocity_controller', anonymous=True)
         rospy.loginfo("CbfVelocityController node initialized (ROS 1) with namespace: '{}'".format(namespace))
@@ -93,7 +93,7 @@ class CbfVelocityController:
 
         self._filter_semi_major = 0.3
         self._filter_semi_minor = 0.2
-        self._max_speed = 1.0
+        self._max_speed = max_speed
         self._min_speed = 0.03
 
         print("Sleeping")
@@ -129,13 +129,6 @@ class CbfVelocityController:
             rospy.logwarn_throttle(1.0, "Waiting for Odometry and/or Setpoint data...")
             self._publish_zero_velocity()
             return True
-        
-        # 3. Goal Reached Check
-        if la.norm(position_error) < 0.3 and np.abs(yaw_error) < 0.05: # Threshold of 10 cm
-            rospy.loginfo_throttle(1.0, "Goal reached! Holding position.")
-            self._publish_zero_velocity()
-            self._control_status = 1.0
-            return True
 
         return False
 
@@ -163,14 +156,22 @@ class CbfVelocityController:
         
         # Check all stop/skip conditions (Emergency Stop, Missing Data, Goal Reached).
         if self._check_control_state_and_stop(position_error, yaw_error):
-            return 
-            
+            return
+
         # --- Control Logic (only runs if checks above pass) ---
-        
         goal_msg = Twist()
 
+        # 3. Goal Reached Check
+        if la.norm(position_error) < 0.3 and np.abs(yaw_error) < 0.05: # Threshold of 10 cm
+            rospy.loginfo_throttle(1.0, "Goal reached! Holding position.")            
+            self._control_status = 1
+            u_nominal = np.array([0.0, 0.0])
+            u_yaw = 0.0
 
-        u_yaw = np.clip(0.5 * yaw_error, -0.2, 0.2)
+        else:
+            u_nominal = np.array([0.5 * position_error[0], 0.5 * position_error[1]])
+            u_yaw = np.clip(0.5 * yaw_error, -0.2, 0.2)
+
         goal_msg.angular.z = u_yaw
 
         # --- 2. Linear Control (Nominal Velocity) ---
@@ -179,7 +180,6 @@ class CbfVelocityController:
                                      [-np.sin(self._current_yaw), np.cos(self._current_yaw)]])
         
         # Nominal velocity vector (u_nom) in World Frame 
-        u_nominal = np.array([0.5 * position_error[0], 0.5 * position_error[1]])
         if la.norm(u_nominal) > self._max_speed:
             u_nominal = self._max_speed * u_nominal / la.norm(u_nominal) # Normalize and set max speed if moving away
 
@@ -192,7 +192,7 @@ class CbfVelocityController:
         else:
             u_filtered_world = u_nominal
 
-        if (self._control_status != 1) and (la.norm(u) < self._min_speed) and (np.abs(u_yaw) < 0.02):
+        if (self._control_status != 1) and (la.norm(u_filtered_world) < self._min_speed) and (np.abs(u_yaw) < 0.02):
             self._control_status = 2
         
         # --- 5. Transform and Publish ---
@@ -280,22 +280,29 @@ class CbfVelocityController:
         Callback to receive the desired 2D/3D position and orientation setpoint (from PoseStamped).
         Updates desired position and yaw.
         """
-        # Update 3D position setpoint
-        self._desired_position[0] = msg.pose.position.x
-        self._desired_position[1] = msg.pose.position.y
-        self._desired_position[2] = msg.pose.position.z
-
-        # Store full desired orientation
+        new_position = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
         q = msg.pose.orientation
-        self._desired_orientation = np.array([q.x, q.y, q.z, q.w])
-
-        # Calculate desired yaw from quaternion directly using math.atan2 and quaternion components
-        # Yaw (z-rotation) formula: atan2(2*(qw*qz + qx*qy), 1 - 2*(qy^2 + qz^2))
-        self._desired_yaw = math.atan2(
+        new_yaw = math.atan2(
             2.0 * (q.w * q.z + q.x * q.y), 
             1.0 - 2.0 * (q.y**2 + q.z**2)
         )
-        
+        if (la.norm(new_position - self._desired_position) >= 0.3) or (np.abs(new_yaw - self._desired_yaw) >= 0.02):
+            # Update 3D position setpoint
+            self._desired_position[0] = msg.pose.position.x
+            self._desired_position[1] = msg.pose.position.y
+            self._desired_position[2] = msg.pose.position.z
+
+            self._desired_orientation = np.array([q.x, q.y, q.z, q.w])
+
+            # Calculate desired yaw from quaternion directly using math.atan2 and quaternion components
+            # Yaw (z-rotation) formula: atan2(2*(qw*qz + qx*qy), 1 - 2*(qy^2 + qz^2))
+            self._desired_yaw = math.atan2(
+                2.0 * (q.w * q.z + q.x * q.y), 
+                1.0 - 2.0 * (q.y**2 + q.z**2)
+            )
+
+            self._control_status = 0
+            
         if not self._setpoint_received:
             self._setpoint_received = True
             rospy.loginfo("Setpoint Initialized.")
@@ -439,9 +446,9 @@ class CbfVelocityController:
         (status of the control output).
         """
         rospy.loginfo(f"Control Status: {self._control_status}")
-        response = ControlStatusResponse()
-        response.status = self._control_status
-        return response
+        # response = ControlStatusResponse()
+        # response.status = self._control_status
+        return ControlStatusResponse(status=self._control_status)
 
 
 def main():
@@ -461,6 +468,12 @@ def main():
         action='store_true',
         help='If set, the controller skips waiting for the initial setpoint message.'
     )
+    parser.add_argument(
+        '--max_speed',
+        type=float,
+        default=1.0,
+        help='Set the maximum speed of the robot.'
+    )
     
     # 2. Parse arguments, isolating ROS arguments
     # rospy.myargv is necessary in ROS 1 to filter out ROS-specific command line args
@@ -468,7 +481,7 @@ def main():
 
     try:
         # Pass the parsed namespace and autostart flag to the controller constructor
-        CbfVelocityController(namespace=args.namespace, autostart=args.autostart)
+        CbfVelocityController(namespace=args.namespace, autostart=args.autostart, max_speed=args.max_speed)
     except rospy.ROSInterruptException:
         rospy.loginfo('Shutting down the cbf_velocity_controller')
         pass
