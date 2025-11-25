@@ -21,6 +21,7 @@ import sensor_msgs.point_cloud2 as pc2
 import matplotlib.cm as cm
 # Utility for Quaternion to Matrix/Euler conversion (tf_transformations or equivalent is needed)
 from tf.transformations import quaternion_matrix, euler_from_quaternion 
+from ss_worshop.srv import ControlStatus
 
 # Define a class for the CBF Velocity Controller node
 class CbfVelocityController:
@@ -58,7 +59,7 @@ class CbfVelocityController:
         self._stop_subscriber = rospy.Subscriber(
             f"{namespace}/stop", String, self.stop_command_callback, queue_size=1)
 
-        # self._control_status_server = rospy.Service(f"{namespace}/control_status", ControlStatus, self.return_control_status)
+        self._control_status_server = rospy.Service(f"{namespace}/control_status", ControlStatus, self.return_control_status)
         
         # Time period (used for rospy.Rate)
         self._control_dt = 0.1  # seconds
@@ -88,7 +89,7 @@ class CbfVelocityController:
         self._setpoint_received = autostart # Flag is true if autostart arg is used
         self._constraints_active = False   # Flag to check if obstacle constraints are present
         self._stop_command_received = False # Flag: True to force zero velocity
-        self._control_status = True # Flag to indicate to the service client about the status of the controller
+        self._control_status = 1 # Enumeration indicating the control status 0: Performing Task, 1: Task Complete, 2: Task Incomplete
 
         self._filter_semi_major = 0.3
         self._filter_semi_minor = 0.2
@@ -128,9 +129,10 @@ class CbfVelocityController:
             return True
         
         # 3. Goal Reached Check
-        if la.norm(position_error) < 0.2 and np.abs(yaw_error) < 0.05: # Threshold of 10 cm
+        if la.norm(position_error) < 0.3 and np.abs(yaw_error) < 0.05: # Threshold of 10 cm
             rospy.loginfo_throttle(1.0, "Goal reached! Holding position.")
             self._publish_zero_velocity()
+            self._control_status = 1.0
             return True
 
         return False
@@ -166,7 +168,8 @@ class CbfVelocityController:
         goal_msg = Twist()
 
 
-        goal_msg.angular.z = np.clip(0.5 * yaw_error, -0.2, 0.2)
+        u_yaw = np.clip(0.5 * yaw_error, -0.2, 0.2)
+        goal_msg.linear.z = u_yaw
 
         # --- 2. Linear Control (Nominal Velocity) ---
         # Rotation matrix from World Frame to Robot Frame (only 2D part needed for velocity transform)
@@ -175,7 +178,8 @@ class CbfVelocityController:
         
         # Nominal velocity vector (u_nom) in World Frame 
         u_nominal = np.array([0.5 * position_error[0], 0.5 * position_error[1]])
-        u_nominal = u_nominal / la.norm(u_nominal) * 0.5 # Normalize and set max speed if moving away
+        if la.norm(u_nominal) > self._max_speed:
+            u_nominal = self._max_speed * u_nominal / la.norm(u_nominal) # Normalize and set max speed if moving away
 
         # --- 3. CBF Constraint Generation ---
         self._generate_constraint_matrices()
@@ -185,12 +189,15 @@ class CbfVelocityController:
             u_filtered_world = self._cbf_filter(u_nominal)
         else:
             u_filtered_world = u_nominal
+
+        if (self._control_status != 1) and (la.norm(u) < self._min_speed) and (np.abs(u_yaw) < 0.02):
+            self._control_status = 2
         
         # --- 5. Transform and Publish ---
         # Project World Frame velocity (u_filtered_world) into Robot Frame
         u_filtered_robot_frame = R_world_to_robot @ u_filtered_world
 
-        if la.norm(u_filtered_robot_frame) < 0.03:
+        if la.norm(u_filtered_robot_frame) < self._min_speed:
             u_filtered_robot_frame = 0.0*u_filtered_robot_frame
         
         # Apply clamping to output velocities
@@ -222,8 +229,6 @@ class CbfVelocityController:
         except ValueError:
             rospy.logerr("Constraint matrices have incompatible dimensions.")
             u = np.array([0.0, 0.0])
-
-        # if la.norm(u_nominal) > 0.1 and la.norm(u)
 
         try:
             return np.array([u[0], u[1]])
@@ -424,7 +429,7 @@ class CbfVelocityController:
             self.b = np.array([-1000.0])
             self._constraints_active = False 
 
-    def handle_control_status(self, req):
+    def return_control_status(self, req):
         """
         The callback function executed when the service is called.
         
@@ -432,9 +437,9 @@ class CbfVelocityController:
         (status of the control output).
         """
         rospy.loginfo(f"Control Status: {self._control_status}")
-        # response = ControlStatusResponse()
-        # response.status = self._control_status
-        # return response
+        response = ControlStatusResponse()
+        response.status = self._control_status
+        return response
 
 
 def main():

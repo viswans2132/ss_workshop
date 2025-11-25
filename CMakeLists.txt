@@ -10,15 +10,26 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
   cmake_modules
+  message_generation
 )
 
 find_package(Eigen REQUIRED)
 
+add_service_files(
+  FILES
+  ControlStatus.srv  # Your custom service file here
+)
+
+generate_messages(
+  DEPENDENCIES
+  std_msgs  # Or other message dependencies if any
+)
+
 catkin_package(
   INCLUDE_DIRS include ${Eigen_INCLUDE_DIRS}
   LIBRARIES  ss_pid_controller
-  CATKIN_DEPENDS geometry_msgs mav_msgs nav_msgs roscpp sensor_msgs 
-  DEPENDS Eigen 
+  CATKIN_DEPENDS geometry_msgs mav_msgs nav_msgs roscpp sensor_msgs std_msgs message_runtime
+  DEPENDS Eigen  
 )
 
 include_directories(
@@ -26,6 +37,8 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
 )
+
+
 
 add_library(ss_pid_controller
   src/libs/pid_controller.cpp
@@ -69,4 +82,9 @@ install(
   FILES_MATCHING PATTERN "*.h"
 )
 
+catkin_install_python(PROGRAMS
+  src/scripts/spot_cbf.py
+  src/scripts/laser_cbf_shafterx4.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
