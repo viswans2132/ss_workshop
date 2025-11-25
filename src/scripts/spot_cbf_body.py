@@ -165,50 +165,50 @@ class CbfVelocityController:
         if la.norm(position_error) < 0.3 and np.abs(yaw_error) < 0.05: # Threshold of 10 cm
             rospy.loginfo_throttle(1.0, "Goal reached! Holding position.")            
             self._control_status = 1
-            u_nominal = np.array([0.0, 0.0])
+            u_nominal_body = np.array([0.0, 0.0])
             u_yaw = 0.0
 
         else:
             u_nominal = np.array([0.5 * position_error[0], 0.5 * position_error[1]])
+            R_world_to_robot = np.array([[np.cos(self._current_yaw), np.sin(self._current_yaw)], 
+                                         [-np.sin(self._current_yaw), np.cos(self._current_yaw)]])
+            # --- 5. Transform and Publish ---
+            # Project World Frame velocity (u_filtered_world) into Robot Frame
+            u_nominal_body = R_world_to_robot @ u_nominal
+            if la.norm(u_nominal_body) > self._max_speed:
+                u_nominal_body = self._max_speed * u_nominal_body / la.norm(u_nominal_body) # Normalize and set max speed if moving away
+
             u_yaw = np.clip(0.5 * yaw_error, -0.2, 0.2)
 
         goal_msg.angular.z = u_yaw
 
         # --- 2. Linear Control (Nominal Velocity) ---
         # Rotation matrix from World Frame to Robot Frame (only 2D part needed for velocity transform)
-        R_world_to_robot = np.array([[np.cos(self._current_yaw), np.sin(self._current_yaw)], 
-                                     [-np.sin(self._current_yaw), np.cos(self._current_yaw)]])
         
         # Nominal velocity vector (u_nom) in World Frame 
-        if la.norm(u_nominal) > self._max_speed:
-            u_nominal = self._max_speed * u_nominal / la.norm(u_nominal) # Normalize and set max speed if moving away
 
         # --- 3. CBF Constraint Generation ---
         self._generate_constraint_matrices()
 
         # --- 4. CBF Filtering (Quadratic Program) ---
         if self._constraints_active:
-            u_filtered_world = self._cbf_filter(u_nominal)
+            u_filtered_body = self._cbf_filter(u_nominal_body)
         else:
-            u_filtered_world = u_nominal
+            u_filtered_body = u_nominal_body
 
-        if (self._control_status != 1) and (la.norm(u_filtered_world) < self._min_speed) and (np.abs(u_yaw) < 0.02):
+        if (self._control_status != 1) and (la.norm(u_filtered_body) < self._min_speed) and (np.abs(u_yaw) < 0.02):
             self._control_status = 2
         
-        # --- 5. Transform and Publish ---
-        # Project World Frame velocity (u_filtered_world) into Robot Frame
-        u_filtered_robot_frame = R_world_to_robot @ u_filtered_world
 
-        if la.norm(u_filtered_robot_frame) < self._min_speed:
-            u_filtered_robot_frame = 0.0*u_filtered_robot_frame
+        if la.norm(u_filtered_body) < self._min_speed:
+            u_filtered_body = 0.0*u_filtered_body
         
         # Apply clamping to output velocities
-        goal_msg.linear.x = np.clip(u_filtered_robot_frame[0], -0.8, 0.8)
-        goal_msg.linear.y = np.clip(u_filtered_robot_frame[1], -0.8, 0.8)
+        goal_msg.linear.x = np.clip(u_filtered_body[0], -0.8, 0.8)
+        goal_msg.linear.y = np.clip(u_filtered_body[1], -0.8, 0.8)
             
         self._velocity_publisher.publish(goal_msg)
-        rospy.loginfo('Command: Linear X: {:.2f}, Linear Y: {:.2f}, Angular Z: {:.2f}'.format(
-            goal_msg.linear.x, goal_msg.linear.y, goal_msg.angular.z))
+        rospy.loginfo(f'Command: Linear X: {goal_msg.linear.x:.2f}, Linear Y: {goal_msg.linear.y:.2f}, Angular Z: {goal_msg.angular.z:.2f}')
 
 
     def _cbf_filter(self, u_nominal):
@@ -317,35 +317,22 @@ class CbfVelocityController:
 
         # Convert the list of points to a NumPy array
         points = np.array(points)
-        shifted_points = np.array([points[:, 0] + 0.25, points[:, 1], points[:,2]]).T
+        shifted_points = np.array([points[:, 0] + 0.25, points[:, 1], points[:,2] + 0.05]).T
 
-        # ellipse_mask = (shifted_points[:,0]**2 / self._filter_semi_major**2) + (shifted_points[:,1]**2 / self._filter_semi_minor**2) > 1
-        # shifted_points = shifted_points[ellipse_mask]
-        rect_mask = ((shifted_points[:, 0] > 0.3) | (shifted_points[:, 0] < -0.3)) | ((shifted_points[:, 1] > 0.2) | (shifted_points[:, 0] < -0.2)) 
+        rect_mask = ((shifted_points[:, 0] > 0.2) | (shifted_points[:, 0] < -0.3)) | ((shifted_points[:, 1] > 0.2) | (shifted_points[:, 0] < -0.2)) 
         # print(rect_mask.shape)
 
         shifted_points = shifted_points[rect_mask]
-
         
         distance_mask = la.norm(shifted_points, axis=1) < 2.5
         shifted_points = shifted_points[distance_mask]
-
-
-        # # 1. Distance filter (points must be within 2.5m)
-        # distances = np.linalg.norm(points, axis=1)
-        # points = points[distances <= 2.5]
-        # distances = distances[distances <=2.5]
-        # points = points[distances >= 0.8]
-        # ellipse_mask = (shifted_x**2 / a**2) + (shifted_y**2 / b**2) >= 1
 
         # 2. Voxel Grid downsampling
         voxel_size = 0.1
         discrete_coords = np.floor(points / voxel_size).astype(np.int32)
         _, unique_indices = np.unique(discrete_coords, axis=0, return_index=True)
         points = points[unique_indices]
-        
-        # Store processed points (N x 3)
-        # self.points_array = np.array([points[:,0], points[:,1], points[:,2]]).T
+       
         self.points_array = shifted_points
 
         # Check constraint feasibility
@@ -363,23 +350,11 @@ class CbfVelocityController:
         if self.points_array.size < 1:
             self._constraints_active = False
             return
-            
-        # 1. Rotate points from sensor frame to World frame (assuming sensor is on robot)
-        # Get the full 3x3 rotation matrix from Quaternion
-        R_robot_to_world = quaternion_matrix(self._current_orientation)[:3, :3]
         
-        # Rotated points are in the world frame, relative to the robot origin
-        rotated_points = (R_robot_to_world @ self.points_array.T).T
-
-        if len(rotated_points) < 1:
-            self._constraints_active = False
-            return
-
-        # 2. Separate Ground and Elevated Points based on world Z position
-        z_world = rotated_points[:,2] + self._current_position[2]
+        z_world = self.points_array[:,2] + self._current_position[2]
         
         # Ground points are ignored for obstacle avoidance in this CBF structure
-        elevated_points = rotated_points[z_world > 0.2] # Z-world is > 0.2
+        elevated_points = self.points_array[z_world > 0.1] # Z-world is > 0.2
         
         # Reset constraint matrices
         A_list = []
@@ -403,7 +378,6 @@ class CbfVelocityController:
             b_list.append(b_elevated)
             
             # --- Visualization ---
-            translated_points = elevated_points + self._current_position
             fields = [PointField('x', 0, PointField.FLOAT32, 1), 
                       PointField('y', 4, PointField.FLOAT32, 1), 
                       PointField('z', 8, PointField.FLOAT32, 1), 
@@ -413,8 +387,12 @@ class CbfVelocityController:
             pcl_msg.header.stamp = rospy.Time.now()
             pcl_msg.header.frame_id = "odom"
 
+            R_robot_to_world = quaternion_matrix(self._current_orientation)[:3, :3]
+            rotated_points = (R_robot_to_world @ elevated_points.T).T
+            translated_points = rotated_points + self._current_position
+
             # Color points based on magnitude (for visualization only)
-            magn = 1*(np.sum(elevated_points**2, 1) - 1.0)
+            magn = 1*(np.sum(rotated_points**2, 1) - 1.0)
             magn_normalized = 1-(magn - magn.min())/(magn.max() - magn.min() + 0.0001)
             color_map = cm.get_cmap('magma') 
             colors = (color_map(magn_normalized)[:,:3]*255).astype(np.uint8)
