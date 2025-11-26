@@ -18,6 +18,7 @@ find_package(Eigen REQUIRED)
 add_service_files(
   FILES
   ControlStatus.srv  # Your custom service file here
+  SwitchBodyCommand.srv
 )
 
 generate_messages(
@@ -29,7 +30,7 @@ catkin_package(
   INCLUDE_DIRS include ${Eigen_INCLUDE_DIRS}
   LIBRARIES  ss_pid_controller
   CATKIN_DEPENDS geometry_msgs mav_msgs nav_msgs roscpp sensor_msgs std_msgs message_runtime
-  DEPENDS Eigen  
+  DEPENDS Eigen
 )
 
 include_directories(
