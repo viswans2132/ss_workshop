@@ -458,6 +458,8 @@ class InspectCbf:
 
             if self._accept_body_commands:
                 lidar_points_xy = np.array([self.points_array[:,0] - 0.25, self.points_array[:,1]])
+                # front_mask = lidar_points_xy[:, 0] > 0.1
+                # lidar_points_xy = lidar_points_xy[front_mask]
 
                 dist_from_lidar = la.norm(lidar_points_xy, axis=0)
                 closest_index = np.argmin(dist_from_lidar)

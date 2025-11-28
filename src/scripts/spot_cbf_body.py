@@ -93,8 +93,8 @@ class CbfVelocityController:
 
         self._recovery_enabled = recovery
 
-        self._safety_semi_major = 0.55
-        self._safety_semi_minor = 0.3
+        self._safety_semi_major = 0.7
+        self._safety_semi_minor = 0.4
 
         self.CBF_X_POW2 = self._safety_semi_major**2
         self.CBF_Y_POW2 = self._safety_semi_minor**2
@@ -350,14 +350,14 @@ class CbfVelocityController:
 
         # Convert the list of points to a NumPy array
         points = np.array(points)
-        shifted_points = np.array([points[:, 0] + 0.25, points[:, 1], points[:,2] + 0.05]).T
+        shifted_points = np.array([points[:, 0] + 0.28, points[:, 1], points[:,2] + 0.05]).T
 
         rect_mask = ((shifted_points[:, 0] > 0.2) | (shifted_points[:, 0] < -0.3)) | ((shifted_points[:, 1] > 0.2) | (shifted_points[:, 0] < -0.2)) 
         # print(rect_mask.shape)
 
         shifted_points = shifted_points[rect_mask]
         
-        distance_mask = la.norm(shifted_points, axis=1) < 2.5
+        distance_mask = la.norm(shifted_points, axis=1) < 3.5
         shifted_points = shifted_points[distance_mask]
 
         # 2. Voxel Grid downsampling
