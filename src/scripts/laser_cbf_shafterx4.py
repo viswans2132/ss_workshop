@@ -10,6 +10,7 @@ from sensor_msgs.msg import PointCloud2, PointField
 from tf.transformations import euler_from_quaternion, quaternion_matrix
 import matplotlib.cm as cm
 import argparse
+from ss_workshop.srv import ControlStatus, ControlStatusResponse
 
 
 class VelocityController:
@@ -38,6 +39,7 @@ class VelocityController:
 		self.consFlag = False
 		self.odomFlag = False
 		self.controlFlag = self.startFlag
+		self._control_status = 0
 
 		self.odom_sub = rospy.Subscriber(
 		    f"/{self.namespace}/odometry_sensor1/odometry", Odometry, self.callback_odometry
@@ -52,6 +54,8 @@ class VelocityController:
 
 		self.cmd_vel_pub = rospy.Publisher(f"/{self.namespace}/vel_msg", TwistStamped, queue_size=10)
 		self.laser_pub = rospy.Publisher("/reduced_points", PointCloud2, queue_size=10)
+
+        self._control_status_server = rospy.Service(f"{namespace}/control_status", ControlStatus, self.return_control_status)
 
 
 		while not rospy.is_shutdown():
@@ -108,18 +112,35 @@ class VelocityController:
 
 
 	def sp_pose_sta_callback(self, msg):
-		self.des_position[0] = msg.pose.position.x
-		self.des_position[1] = msg.pose.position.y
-		self.des_position[2] = msg.pose.position.z
-		self.des_orientation[0] = msg.pose.orientation.x
-		self.des_orientation[1] = msg.pose.orientation.y
-		self.des_orientation[2] = msg.pose.orientation.z
-		self.des_orientation[3] = msg.pose.orientation.w
-		q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
-		self.des_yaw = np.arctan2(2.0*(q[0]*q[1] + q[3]*q[2]), 1 - 2*(q[1]*q[1] + q[2]*q[2]))
+		new_position = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
+        q = msg.pose.orientation
+        new_yaw = math.atan2(
+            2.0 * (q.w * q.z + q.x * q.y), 
+            1.0 - 2.0 * (q.y**2 + q.z**2)
+        )
+		if (np,linalg.norm(self.des_position - new_position) >= 0.3) or (np.abs(self.des_yaw -) >= 0.05):
+		self.des_position = new_position
+		self.des_orientation = q
+		self.des_yaw = new_yaw
+
+		self._control_status = 0
+		self.counter = 0
 		
 		if not self.controlFlag:
 			self.controlFlag = True
+
+
+    def return_control_status(self, req):
+        """
+        The callback function executed when the service is called.
+        
+        It takes the request object (req) and returns a response object
+        (status of the control output).
+        """
+        # rospy.loginfo(f"Control Status: {self._control_status}")
+        # response = ControlStatusResponse()
+        # response.status = self._control_status
+        return ControlStatusResponse(status=self._control_status)
 
 	def pointcloud_callback(self, msg):
 		# Convert the PointCloud2 message to a list of points
@@ -246,17 +267,37 @@ class VelocityController:
 	def get_vel_sp(self):
 		if self.controlFlag:
 			self.error_pos = self.position - self.pos_sp
-			des_vel = self.Kpos * self.error_pos
-			des_vel = np.maximum(-np.array([0.9, 0.9, 0.5]), np.minimum(np.array([0.9, 0.9, 0.5]), des_vel))
-			if self.consFlag:
-				des_vel = self.safety_filter(des_vel)
 			errYaw = self.yaw - self.des_yaw
-		
 			if np.abs(errYaw) > np.pi:
 				errYaw = np.sign(errYaw)*(np.abs(errYaw) - 2*np.pi)
-			# print('{:.2f}'.format(errYaw))
-			
+
 			desYawVel = -2.3*errYaw
+
+			if np.linalg.norm(self.error_pos) < 0.1:
+				des_vel = np.array([0.0, 0.0, 0.0])
+
+				if self.errYaw < 0.05:
+					desYawVel = 0.0
+					self._control_status = 1
+
+			else:
+				des_vel = self.Kpos * self.error_pos
+				des_vel = np.maximum(-np.array([0.9, 0.9, 0.5]), np.minimum(np.array([0.9, 0.9, 0.5]), des_vel))
+			
+			if self.consFlag:
+				des_vel_filtered = self.safety_filter(des_vel)
+
+				if np.linalg.norm(des_vel_filtered) < 0.03:
+					des_vel_filtered = np.array([0.0, 0.0, 0.0])
+					if np.linalg.norm(self.error_pos) >= 0.1:
+						self.counter += 1
+						if self.counter > 30:
+							self._control_status = 2
+
+				else:
+					self.counter = 0
+
+				des_vel = des_vel_filtered.copy()
 			
 			desYawVel = np.minimum(0.6, np.maximum(-0.6, desYawVel))
 			# des_vel = np.zeros(des_vel.shape)
