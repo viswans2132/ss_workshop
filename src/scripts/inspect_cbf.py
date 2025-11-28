@@ -185,7 +185,7 @@ class InspectCbf:
             yaw_error = self._desired_yaw - self._current_yaw
             
             # Normalize the angular error to be between -pi and pi
-            yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi 
+            yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi
             
 
             # 3. Goal Reached Check
@@ -204,9 +204,10 @@ class InspectCbf:
                     u_nominal_body = 2 * self._max_speed * u_nominal_body / la.norm(u_nominal_body) # Normalize and set max speed if moving away
         else:
             if self._accept_body_commands:
-                u_nominal_body = self._desired_velocity_body.copy()
-                yaw_error = self._desired_yaw - self._current_yaw
-                print(yaw_error)
+                u_nominal_body = self._desired_velocity_body[:2]
+                yaw_error = self._desired_yaw
+
+                
 
             else:
                 u_nominal_body = R_world_to_robot @ self._desired_velocity_world[:2]
@@ -221,29 +222,9 @@ class InspectCbf:
         else:
             u_filtered_body = u_nominal_body
 
-        # if self._recovery_enabled:
-        #     if self._control_status == 2 and la.norm(position_error) > 0.3:
-        #         u_filtered_world = R_world_to_robot.T @ u_filtered_body
-        #         if la.norm(u_filtered_world) < 0.00001:
-        #             des_yaw = np.arctan2(position_error[1], position_error[0])
-        #             print(f'{des_yaw:.2f}')
-        #         else:
-        #             des_yaw = np.arctan2(u_filtered_world[1], u_filtered_world[0])
-        #         yaw_error = des_yaw - self._current_yaw
-        #         yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi 
-
+        yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi
         
         u_yaw = np.clip(self._k_yaw * yaw_error, -0.5, 0.5)
-
-        # if (self._control_status != 1) and (la.norm(u_filtered_body) < self._min_speed) and (np.abs(u_yaw) < 0.02):
-        #     self._counter += 1
-        #     if self._counter > 10:
-        #         self._control_status = 2
-        # else:
-        #     self._counter = 0
-        # # print(self._counter)
-
-        # u_yaw = np.clip(0.8 * yaw_error, -0.5, 0.5)        
 
         if la.norm(u_filtered_body) < self._min_speed:
             u_filtered_body = 0.0*u_filtered_body
@@ -255,6 +236,7 @@ class InspectCbf:
             
         self._velocity_publisher.publish(goal_msg)
         rospy.loginfo(f'Command: Linear X: {goal_msg.linear.x:.2f}, Linear Y: {goal_msg.linear.y:.2f}, Angular Z: {goal_msg.angular.z:.2f}')
+        # rospy.loginfo(f'Desired: {self._desired_yaw:.2f}, Angular Z: {goal_msg.angular.z:.2f}')
 
 
     def _cbf_filter(self, u_nominal):
@@ -275,7 +257,7 @@ class InspectCbf:
                 u = np.array([0.0, 0.0])
 
         except ValueError:
-            rospy.logerr("Constraint matrices have incompatible dimensions.")
+            rospy.logerr("Matrices have incompatible dimensions.")
             u = np.array([0.0, 0.0])
 
         try:
@@ -393,14 +375,8 @@ class InspectCbf:
 
         shifted_points = shifted_points[rect_mask]
         
-        distance_mask = la.norm(shifted_points, axis=1) < 2.5
+        distance_mask = la.norm(shifted_points, axis=1) < 4.5
         shifted_points = shifted_points[distance_mask]
-
-        # 2. Voxel Grid downsampling
-        voxel_size = 0.25
-        discrete_coords = np.floor(shifted_points / voxel_size).astype(np.int32)
-        _, unique_indices = np.unique(discrete_coords, axis=0, return_index=True)
-        shifted_points = shifted_points[unique_indices]
        
         self.points_array = shifted_points
 
@@ -424,14 +400,6 @@ class InspectCbf:
             self._constraints_active = False
             return
 
-        if self._accept_body_commands:
-            lidar_points_xy = np.array([self.points_array[0] - 0.25, self.points_array[1]])
-
-            dist_from_lidar = la.norm(lidar_points_xy, axis=1)
-            closest_point = lidar_points_xy[np.argmin(dist_from_lidar)]
-
-            self._desired_yaw = np.arctan2(closest_point[1], closest_point[0])
-
             
         # 1. Z-axis filtering requires World Frame positions
         R_robot_to_world_3D = quaternion_matrix(self._current_orientation)[:3, :3]
@@ -446,9 +414,20 @@ class InspectCbf:
         
         # Find indices of elevated points (obstacles)
         elevated_indices = np.where(z_world > 0.1)[0]
-        
+
         # Extract the points in the ROBOT BODY FRAME that are elevated
-        elevated_points_robot_frame = self.points_array[elevated_indices]
+        try:
+            elevated_points_robot_frame = self.points_array[elevated_indices]
+
+        except IndexError:
+            elevated_points_robot_frame = self.points_array
+
+        
+        # 2. Voxel Grid downsampling
+        voxel_size = 0.25
+        discrete_coords = np.floor(elevated_points_robot_frame / voxel_size).astype(np.int32)
+        _, unique_indices = np.unique(discrete_coords, axis=0, return_index=True)
+        elevated_points_robot_frame = elevated_points_robot_frame[unique_indices]
         
         # Reset constraint matrices
         A_list = []
@@ -472,14 +451,42 @@ class InspectCbf:
             A_robot_frame = np.column_stack((Ax, Ay)) # N x 2 matrix
             
             # b_i = -gamma * h(x). gamma = 0.4
-            b_elevated = -0.7 * h_elevated 
+            b_robot_frame = -0.7 * h_elevated 
+            
+            # Translate elevated points (in the robot frame) to the World Frame for visualization
+            translated_points = (R_robot_to_world_3D @ elevated_points_robot_frame.T).T + self._current_position
+
+            if self._accept_body_commands:
+                lidar_points_xy = np.array([self.points_array[:,0] - 0.25, self.points_array[:,1]])
+
+                dist_from_lidar = la.norm(lidar_points_xy, axis=0)
+                closest_index = np.argmin(dist_from_lidar)
+                closest_point = lidar_points_xy[:, closest_index]
+                self._desired_yaw = np.arctan2(closest_point[1], closest_point[0])
+                # print(dist_from_lidar.shape)
+
+                normal = closest_point / np.linalg.norm(closest_point)
+                dist_to_point = dist_from_lidar[closest_index]
+                # hyperplane_point = closest_point - 1.5 * normal
+                # d = -normal @ hyperplane_point
+
+                h_ = 1.5 - dist_to_point
+                A_ = normal.reshape(1, -1)
+                b_ = - 1.0 * h_
+
+                print(f"{h_:.2f}")
+
+                A_robot_frame = np.vstack((A_robot_frame, A_))
+                b_robot_frame = np.append(b_robot_frame, b_)
+
 
             A_list.append(A_robot_frame)
-            b_list.append(b_elevated)
+            b_list.append(b_robot_frame)
+
+            # print(A_robot_frame.shape)
+            # print(b_robot_frame.shape)
             
             # --- Visualization ---
-            # Translate elevated points (in the robot frame) to the World Frame for visualization
-            translated_points = rotated_points_world[elevated_indices] + self._current_position 
 
             fields = [PointField('x', 0, PointField.FLOAT32, 1), 
                       PointField('y', 4, PointField.FLOAT32, 1), 
