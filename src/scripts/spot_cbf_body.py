@@ -91,10 +91,10 @@ class CbfVelocityController:
         self._stop_command_received = False # Flag: True to force zero velocity
         self._control_status = 0 # Enumeration indicating the control status 0: Performing Task, 1: Task Complete, 2: Task Incomplete
 
-        self._recovery_enabled = recovery
+        self._recovery_enabled = False
 
         self._safety_semi_major = 0.7
-        self._safety_semi_minor = 0.4
+        self._safety_semi_minor = 0.7
 
         self.CBF_X_POW2 = self._safety_semi_major**2
         self.CBF_Y_POW2 = self._safety_semi_minor**2
@@ -171,7 +171,7 @@ class CbfVelocityController:
         goal_msg = Twist()
 
         # 3. Goal Reached Check
-        if la.norm(position_error) < 0.3 and np.abs(yaw_error) < 0.05: # Threshold of 10 cm
+        if la.norm(position_error) <= 0.3 and np.abs(yaw_error) <= 0.05: # Threshold of 10 cm
             rospy.loginfo_throttle(1.0, "Goal reached! Holding position.")            
             self._control_status = 1
             u_nominal_body = np.array([0.0, 0.0])
@@ -242,6 +242,7 @@ class CbfVelocityController:
             
         self._velocity_publisher.publish(goal_msg)
         rospy.loginfo(f'Command: Linear X: {goal_msg.linear.x:.2f}, Linear Y: {goal_msg.linear.y:.2f}, Angular Z: {goal_msg.angular.z:.2f}')
+        rospy.loginfo(f'Error X: {position_error[0]:.2f}, Error Y: {position_error[1]:.2f}')
 
 
     def _cbf_filter(self, u_nominal):
@@ -352,16 +353,16 @@ class CbfVelocityController:
         points = np.array(points)
         shifted_points = np.array([points[:, 0] + 0.28, points[:, 1], points[:,2] + 0.05]).T
 
-        rect_mask = ((shifted_points[:, 0] > 0.2) | (shifted_points[:, 0] < -0.3)) | ((shifted_points[:, 1] > 0.2) | (shifted_points[:, 0] < -0.2)) 
+        rect_mask = ((shifted_points[:, 0] > 0.5) | (shifted_points[:, 0] < -0.5)) | ((shifted_points[:, 1] > 0.3) | (shifted_points[:, 0] < -0.3)) 
         # print(rect_mask.shape)
 
-        shifted_points = shifted_points[rect_mask]
+        # shifted_points = shifted_points[rect_mask]
         
         distance_mask = la.norm(shifted_points, axis=1) < 3.5
         shifted_points = shifted_points[distance_mask]
 
         # 2. Voxel Grid downsampling
-        voxel_size = 0.25
+        voxel_size = 0.3
         discrete_coords = np.floor(shifted_points / voxel_size).astype(np.int32)
         _, unique_indices = np.unique(discrete_coords, axis=0, return_index=True)
         shifted_points = shifted_points[unique_indices]
@@ -427,14 +428,14 @@ class CbfVelocityController:
             A_robot_frame = np.column_stack((Ax, Ay)) # N x 2 matrix
             
             # b_i = -gamma * h(x). gamma = 0.4
-            b_elevated = -0.7 * h_elevated 
+            b_elevated = -0.5 * h_elevated 
 
             A_list.append(A_robot_frame)
             b_list.append(b_elevated)
             
             # --- Visualization ---
             # Translate elevated points (in the robot frame) to the World Frame for visualization
-            translated_points = rotated_points_world[elevated_indices] + self._current_position 
+            translated_points = rotated_points_world[elevated_indices] + self._current_position + np.array([-0.28, 0.0, -0.05])
 
             fields = [PointField('x', 0, PointField.FLOAT32, 1), 
                       PointField('y', 4, PointField.FLOAT32, 1), 
@@ -443,7 +444,7 @@ class CbfVelocityController:
 
             pcl_msg = PointCloud2()
             pcl_msg.header.stamp = rospy.Time.now()
-            pcl_msg.header.frame_id = "odom" # Publish in a stable world-like frame
+            pcl_msg.header.frame_id = "spot/odom" # Publish in a stable world-like frame
 
             # Color points based on proximity to safety boundary
             magn = h_elevated # Use the CBF value h for coloring
