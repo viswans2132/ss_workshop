@@ -30,6 +30,7 @@ class VelocityController:
 		self.Korient = -0.3
 
 		self.sp_threshold = 0.3
+		self.counter = 0.0
 
 		self.rate = rospy.Rate(20)
 
@@ -55,7 +56,7 @@ class VelocityController:
 		self.cmd_vel_pub = rospy.Publisher(f"/{self.namespace}/vel_msg", TwistStamped, queue_size=10)
 		self.laser_pub = rospy.Publisher("/reduced_points", PointCloud2, queue_size=10)
 
-        self._control_status_server = rospy.Service(f"{namespace}/control_status", ControlStatus, self.return_control_status)
+		self._control_status_server = rospy.Service(f"{namespace}/control_status", ControlStatus, self.return_control_status)
 
 
 		while not rospy.is_shutdown():
@@ -105,42 +106,28 @@ class VelocityController:
 		self.des_orientation[3] = msg.pose.pose.orientation.w
 		q = [msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w]
 		self.des_yaw = np.arctan2(2.0*(q[0]*q[1] + q[3]*q[2]), 1 - 2*(q[1]*q[1] + q[2]*q[2]))
-		# self.des_yaw = np.arctan2(2.0*(q[1]*q[2] + q[3]*q[0]), q[3]*q[3] - q[0]*q[0] - q[1]*q[1] + q[2]*q[2])
-		# print(self.des_yaw)
-		# print(q[3]*q[3] - q[0]*q[0] - q[1]*q[1] + q[2]*q[2])
-		# print((q[0]*q[1] + q[3]*q[2]))
 
 
 	def sp_pose_sta_callback(self, msg):
 		new_position = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
-        q = msg.pose.orientation
-        new_yaw = math.atan2(
-            2.0 * (q.w * q.z + q.x * q.y), 
-            1.0 - 2.0 * (q.y**2 + q.z**2)
-        )
-		if (np,linalg.norm(self.des_position - new_position) >= 0.3) or (np.abs(self.des_yaw -) >= 0.05):
-		self.des_position = new_position
-		self.des_orientation = q
-		self.des_yaw = new_yaw
+		q = msg.pose.orientation
+		new_yaw = math.atan2(
+		    2.0 * (q.w * q.z + q.x * q.y), 
+		    1.0 - 2.0 * (q.y**2 + q.z**2)
+		)
+		if (np,linalg.norm(self.des_position - new_position) >= 0.3) or (np.abs(self.des_yaw - new_yaw) >= 0.05):
+			self.des_position = new_position
+			self.des_orientation = q
+			self.des_yaw = new_yaw
 
-		self._control_status = 0
-		self.counter = 0
+			self._control_status = 0
+			self.counter = 0
 		
 		if not self.controlFlag:
 			self.controlFlag = True
 
-
-    def return_control_status(self, req):
-        """
-        The callback function executed when the service is called.
-        
-        It takes the request object (req) and returns a response object
-        (status of the control output).
-        """
-        # rospy.loginfo(f"Control Status: {self._control_status}")
-        # response = ControlStatusResponse()
-        # response.status = self._control_status
-        return ControlStatusResponse(status=self._control_status)
+	def return_control_status(self, req):
+		return ControlStatusResponse(status=self._control_status)
 
 	def pointcloud_callback(self, msg):
 		# Convert the PointCloud2 message to a list of points
