@@ -22,6 +22,8 @@ import matplotlib.cm as cm
 # Utility for Quaternion to Matrix/Euler conversion (tf_transformations or equivalent is needed)
 from tf.transformations import quaternion_matrix, euler_from_quaternion 
 from ss_workshop.srv import ControlStatus, ControlStatusResponse
+from visualization_msgs.msg import Marker
+from geometry_msgs.msg import Point
 
 # Define a class for the CBF Velocity Controller node
 class CbfVelocityController:
@@ -67,13 +69,17 @@ class CbfVelocityController:
 
         self._recovery_enabled = False
 
-        self._safety_semi_major = 0.7
-        self._safety_semi_minor = 0.5
+        self._safety_semi_major = 0.6
+        self._safety_semi_minor = 0.4
 
-        self.CBF_X_POW4 = self._safety_semi_major**4
-        self.CBF_Y_POW4 = self._safety_semi_minor**4
+        self.CBF_X_POW4 = self._safety_semi_major**2
+        self.CBF_Y_POW4 = self._safety_semi_minor**2
 
-        self._k_gamma = 2.0
+        self._k_pos = 0.5
+        self._k_yaw = 0.8
+        self._k_alpha = 1.0
+        self._k_gamma = 0.9
+        self._k_kappa = 8.0
 
 
         self._max_speed = max_speed
@@ -107,6 +113,7 @@ class CbfVelocityController:
             f"{namespace}/stop", String, self.stop_command_callback, queue_size=1)
 
         self._control_status_server = rospy.Service(f"{namespace}/control_status", ControlStatus, self.return_control_status)
+        self.cbf_marker_pub = rospy.Publisher("cbf_safe_set", Marker, queue_size=1)
 
         print("Sleeping")
         time.sleep(1)
@@ -181,7 +188,7 @@ class CbfVelocityController:
             u_yaw = 0.0
 
         else:
-            u_nominal = np.array([0.5 * position_error[0], 0.5 * position_error[1]])
+            u_nominal = np.array([self._k_pos * position_error[0], self._k_pos * position_error[1]])
             R_world_to_robot = np.array([[np.cos(self._current_yaw), np.sin(self._current_yaw)], 
                                          [-np.sin(self._current_yaw), np.cos(self._current_yaw)]])
             # --- 5. Transform and Publish ---
@@ -189,6 +196,7 @@ class CbfVelocityController:
             u_nominal_body = R_world_to_robot @ u_nominal
             if la.norm(u_nominal_body) > self._max_speed:
                 u_nominal_body = self._max_speed * u_nominal_body / la.norm(u_nominal_body) # Normalize and set max speed if moving away
+
 
 
 
@@ -218,7 +226,7 @@ class CbfVelocityController:
                 yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi 
 
         
-        u_yaw = np.clip(0.8 * yaw_error, -0.5, 0.5)
+        u_yaw = np.clip(self._k_yaw * yaw_error, -0.5, 0.5)
 
         if (self._control_status != 1) and (la.norm(u_filtered_body) < self._min_speed) and (np.abs(u_yaw) < 0.02):
             self._counter += 1
@@ -353,7 +361,7 @@ class CbfVelocityController:
         points = np.array(points)
         shifted_points = np.array([points[:, 0] + 0.25, points[:, 1], points[:,2] + 0.05]).T
 
-        rect_mask = ((shifted_points[:, 0] > 0.5) | (shifted_points[:, 0] < -0.5)) | ((shifted_points[:, 1] > 0.3) | (shifted_points[:, 0] < -0.3)) 
+        rect_mask = ((shifted_points[:, 0] > 0.5) | (shifted_points[:, 0] < -0.5)) | ((shifted_points[:, 1] > 0.2) | (shifted_points[:, 1] < -0.2)) 
         # print(rect_mask.shape)
 
         shifted_points = shifted_points[rect_mask]
@@ -366,7 +374,7 @@ class CbfVelocityController:
         shifted_points = shifted_points[height_mask]
 
         # 2. Voxel Grid downsampling
-        voxel_size = 0.25
+        voxel_size = 0.1
         discrete_coords = np.floor(shifted_points / voxel_size).astype(np.int32)
         _, unique_indices = np.unique(discrete_coords, axis=0, return_index=True)
         shifted_points = shifted_points[unique_indices]
@@ -408,7 +416,10 @@ class CbfVelocityController:
         elevated_indices = np.where(z_world > 0.1)[0]
         
         # Extract the points in the ROBOT BODY FRAME that are elevated
-        elevated_points_robot_frame = self.points_array[elevated_indices]
+        try:
+            elevated_points_robot_frame = self.points_array[elevated_indices]
+        except IndexError:
+            elevated_points_robot_frame = []
         
         # Reset constraint matrices
         A_list = []
@@ -420,24 +431,29 @@ class CbfVelocityController:
             X_r = elevated_points_robot_frame[:, 0]
             Y_r = elevated_points_robot_frame[:, 1]
             
-            # 1. CBF function value h (Super-Ellipsoidal distance from origin, n=4)
-            # h = (X_r^4 / A_long^4) + (Y_r^4 / A_lat^4) - 1.0
-            h_elevated = (X_r**4 / self.CBF_X_POW4) + (Y_r**4 / self.CBF_Y_POW4) - 1.0
+            h_elevated = (X_r**2 / self.CBF_X_POW4) + (Y_r**2 / self.CBF_Y_POW4) - 1.0
 
-            # print(h_elevated)
-
-            # 2. Jacobian A (dh/dx, dh/dy)
-            # Ax = -4 * X_r^3 / A_long^4
-            # Ay = -4 * Y_r^3 / A_lat^4
-            Ax = -4 * (X_r**3) / self.CBF_X_POW4
-            Ay = -4 * (Y_r**3) / self.CBF_Y_POW4
+            Ax = -2 * (X_r**1) / self.CBF_X_POW4
+            Ay = -2 * (Y_r**1) / self.CBF_Y_POW4
             A_robot_frame = np.column_stack((Ax, Ay)) # N x 2 matrix
-            
-            # b_i = -gamma * h(x). gamma = 0.4
             b_elevated = -self._k_gamma * h_elevated 
 
-            A_list.append(A_robot_frame)
-            b_list.append(b_elevated)
+            tanh_h = np.tanh(h_elevated/self._k_gamma)
+            scaled_tanh_h = -self._k_kappa * tanh_h
+            max_scaled = np.max(scaled_tanh_h)
+
+            exp_shifted = np.exp(scaled_tanh_h)
+            sum_exp = np.sum(exp_shifted) + 1e-12
+
+            H_composite = -(self._k_gamma/self._k_kappa) * (np.log(sum_exp))
+
+            weights = exp_shifted/sum_exp
+
+            A_combined = (weights[:, None] * A_robot_frame).sum(axis=0)
+            b_combined = -self._k_alpha * H_composite
+
+            A_list.append(A_combined)
+            b_list.append(b_combined)
             
             # --- Visualization ---
             # Translate elevated points (in the robot frame) to the World Frame for visualization
@@ -467,11 +483,12 @@ class CbfVelocityController:
 
             points = pc2.create_cloud(pcl_msg.header, fields, colored_points.tolist())
             self.laser_pub.publish(points)
+            self._publish_cbf_safe_set(A_combined, H_composite)
         
         # --- Final Matrix Construction ---
         if A_list:
             self.A = np.vstack(A_list)
-            self.b = np.concatenate(b_list)
+            self.b = np.array(b_list)
             self._constraints_active = True
         else:
             # If no elevated points, use a dummy 1x2 constraint with h=large positive (always safe)
@@ -492,6 +509,52 @@ class CbfVelocityController:
         # response = ControlStatusResponse()
         # response.status = self._control_status
         return ControlStatusResponse(status=self._control_status)
+
+    def _publish_cbf_safe_set(self, A_combined, H_value):
+        # A_combined = [dH/dx_r, dH/dy_r] at robot origin (2,)
+        # H_value = H(0,0) (scalar)
+
+        marker = Marker()
+        marker.header.frame_id = "base"   # robot body frame
+        marker.header.stamp = rospy.Time.now()
+        marker.ns = "cbf_safe_set"
+        marker.id = 0
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+
+        marker.scale.x = 0.02  # line width
+        marker.color.r = 0.0
+        marker.color.g = 1.0
+        marker.color.b = 0.0
+        marker.color.a = 1.0
+
+        # Approximate safe set as a super‑ellipse of your design radius
+        # Here just visualize the nominal CBF boundary you already use for points:
+        A_long = self._safety_semi_major - 0.01     # long radius in x
+        A_lat  = self._safety_semi_minor - 0.01      # lateral radius in y
+        n = 4.0
+
+        pts = []
+        for theta in np.linspace(0, 2*np.pi, 100, endpoint=False):
+            # Super‑ellipse parametric form in robot frame
+            c = np.cos(theta)
+            s = np.sin(theta)
+            x = np.sign(c) * (abs(c) ** (2.0/n)) * A_long
+            y = np.sign(s) * (abs(s) ** (2.0/n)) * A_lat
+
+            p = Point()
+            p.x = x
+            p.y = y
+            p.z = 0.0
+            pts.append(p)
+
+        # close loop
+        pts.append(pts[0])
+        marker.points = pts
+
+        self.cbf_marker_pub.publish(marker)
+
 
 
 def main():

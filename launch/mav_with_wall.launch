@@ -65,7 +65,7 @@
   <node name="spawn_wall" pkg="gazebo_ros" type="spawn_model"
    args="-param wall_desc
          -urdf
-         -x 3.0
+         -x -1.0
          -y 0.0
          -z 2.05
          -model 'wall'"
