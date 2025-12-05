@@ -69,7 +69,7 @@ class CbfVelocityController:
 
         self._recovery_enabled = False
 
-        self._safety_semi_major = 0.65
+        self._safety_semi_major = 0.7
         self._safety_semi_minor = 0.5
 
         self.CBF_X_POW4 = self._safety_semi_major**2
@@ -359,9 +359,9 @@ class CbfVelocityController:
 
         # Convert the list of points to a NumPy array
         points = np.array(points)
-        shifted_points = np.array([points[:, 0] + 0.25, points[:, 1], points[:,2] + 0.05]).T
+        shifted_points = np.array([points[:, 0] + 0.28, points[:, 1], points[:,2] + 0.05]).T
 
-        rect_mask = ((shifted_points[:, 0] > 0.5) | (shifted_points[:, 0] < -0.5)) | ((shifted_points[:, 1] > 0.2) | (shifted_points[:, 1] < -0.2)) 
+        rect_mask = ((shifted_points[:, 0] > 0.5) | (shifted_points[:, 0] < -0.5)) | ((shifted_points[:, 1] > 0.3) | (shifted_points[:, 1] < -0.3)) 
         # print(rect_mask.shape)
 
         shifted_points = shifted_points[rect_mask]
@@ -457,7 +457,7 @@ class CbfVelocityController:
             
             # --- Visualization ---
             # Translate elevated points (in the robot frame) to the World Frame for visualization
-            translated_points = rotated_points_world[elevated_indices] + self._current_position 
+            translated_points = rotated_points_world[elevated_indices] + self._current_position - np.array([0.28, 0.0, 0.05])
 
             fields = [PointField('x', 0, PointField.FLOAT32, 1), 
                       PointField('y', 4, PointField.FLOAT32, 1), 
@@ -466,7 +466,7 @@ class CbfVelocityController:
 
             pcl_msg = PointCloud2()
             pcl_msg.header.stamp = rospy.Time.now()
-            pcl_msg.header.frame_id = "odom" # Publish in a stable world-like frame
+            pcl_msg.header.frame_id = "spot/odom" # Publish in a stable world-like frame
 
             # Color points based on proximity to safety boundary
             magn = h_elevated # Use the CBF value h for coloring

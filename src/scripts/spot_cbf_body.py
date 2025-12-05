@@ -67,8 +67,8 @@ class CbfVelocityController:
 
         self._recovery_enabled = False
 
-        self._safety_semi_major = 0.7
-        self._safety_semi_minor = 0.5
+        self._safety_semi_major = 0.75
+        self._safety_semi_minor = 0.55
 
         self.CBF_X_POW4 = self._safety_semi_major**4
         self.CBF_Y_POW4 = self._safety_semi_minor**4
@@ -441,7 +441,7 @@ class CbfVelocityController:
             
             # --- Visualization ---
             # Translate elevated points (in the robot frame) to the World Frame for visualization
-            translated_points = rotated_points_world[elevated_indices] + self._current_position 
+            translated_points = rotated_points_world[elevated_indices] + self._current_position - np.array([0.28, 0.0, 0.05])
 
             fields = [PointField('x', 0, PointField.FLOAT32, 1), 
                       PointField('y', 4, PointField.FLOAT32, 1), 
