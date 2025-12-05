@@ -42,6 +42,10 @@ class InspectCbf:
 
         self._k_yaw = 0.8
         self._k_pos = 0.5
+        self._k_alpha_1 = 0.5
+        self._k_alpha_2 = 1.5
+        self._k_gamma = 0.9
+        self._k_kappa = 8.0
 
         # State and Target Variables
         self._current_position = np.array([0.0, 0.0, 0.0]) # 3D Position
@@ -79,7 +83,7 @@ class InspectCbf:
         self._recovery_enabled = recovery
 
         self._safety_semi_major = 0.55
-        self._safety_semi_minor = 0.3
+        self._safety_semi_minor = 0.55
 
         self.CBF_X_POW2 = self._safety_semi_major**2
         self.CBF_Y_POW2 = self._safety_semi_minor**2
@@ -236,7 +240,7 @@ class InspectCbf:
             
         self._velocity_publisher.publish(goal_msg)
         rospy.loginfo(f'Command: Linear X: {goal_msg.linear.x:.2f}, Linear Y: {goal_msg.linear.y:.2f}, Angular Z: {goal_msg.angular.z:.2f}')
-        # rospy.loginfo(f'Desired: {self._desired_yaw:.2f}, Angular Z: {goal_msg.angular.z:.2f}')
+        rospy.loginfo(f'Desired: {self._desired_yaw:.2f}, Angular Z: {goal_msg.angular.z:.2f}')
 
 
     def _cbf_filter(self, u_nominal):
@@ -349,7 +353,7 @@ class InspectCbf:
         """
         if self._accept_body_commands:
             self._desired_velocity_body = np.array([0.0, msg.linear.y, msg.linear.x])
-            self._desired_yaw = self._current_yaw
+            # self._desired_yaw = self._current_yaw
         else:
             self._desired_velocity_world = np.array([msg.linear.x, msg.linear.y, msg.linear.z])
             self._desired_yaw_rate = msg.angular.z            
@@ -368,15 +372,18 @@ class InspectCbf:
 
         # Convert the list of points to a NumPy array
         points = np.array(points)
+        # print(points)
         shifted_points = np.array([points[:, 0] + 0.25, points[:, 1], points[:,2] + 0.05]).T
 
-        rect_mask = ((shifted_points[:, 0] > 0.2) | (shifted_points[:, 0] < -0.3)) | ((shifted_points[:, 1] > 0.2) | (shifted_points[:, 0] < -0.2)) 
+        rect_mask = ((shifted_points[:, 0] > 0.3) | (shifted_points[:, 0] < -0.5)) | ((shifted_points[:, 1] > 0.2) | (shifted_points[:, 0] < -0.2)) 
         # print(rect_mask.shape)
 
         shifted_points = shifted_points[rect_mask]
         
         distance_mask = la.norm(shifted_points, axis=1) < 4.5
         shifted_points = shifted_points[distance_mask]
+        # print("****")
+        # print(shifted_points)
        
         self.points_array = shifted_points
 
@@ -400,10 +407,12 @@ class InspectCbf:
             self._constraints_active = False
             return
 
+        points_array = self.points_array
+
             
         # 1. Z-axis filtering requires World Frame positions
         R_robot_to_world_3D = quaternion_matrix(self._current_orientation)[:3, :3]
-        rotated_points_world = (R_robot_to_world_3D @ self.points_array.T).T
+        rotated_points_world = (R_robot_to_world_3D @ points_array.T).T
 
         if len(rotated_points_world) < 1:
             self._constraints_active = False
@@ -417,14 +426,14 @@ class InspectCbf:
 
         # Extract the points in the ROBOT BODY FRAME that are elevated
         try:
-            elevated_points_robot_frame = self.points_array[elevated_indices]
+            elevated_points_robot_frame = points_array[elevated_indices]
 
         except IndexError:
-            elevated_points_robot_frame = self.points_array
+            elevated_points_robot_frame = points_array
 
         
         # 2. Voxel Grid downsampling
-        voxel_size = 0.25
+        voxel_size = 0.05
         discrete_coords = np.floor(elevated_points_robot_frame / voxel_size).astype(np.int32)
         _, unique_indices = np.unique(discrete_coords, axis=0, return_index=True)
         elevated_points_robot_frame = elevated_points_robot_frame[unique_indices]
@@ -450,40 +459,64 @@ class InspectCbf:
             Ay = -2 * (Y_r**1) / self.CBF_Y_POW2
             A_robot_frame = np.column_stack((Ax, Ay)) # N x 2 matrix
             
-            # b_i = -gamma * h(x). gamma = 0.4
-            b_robot_frame = -0.7 * h_elevated 
+            # # b_i = -gamma * h(x). gamma = 0.4
+            # b_robot_frame = -self._k_alpha_1 * h_elevated 
+
+            tanh_h = np.tanh(h_elevated/self._k_gamma)
+            scaled_tanh_h = -self._k_kappa * tanh_h
+            max_scaled = np.max(scaled_tanh_h)
+
+            exp_shifted = np.exp(scaled_tanh_h)
+            sum_exp = np.sum(exp_shifted) + 1e-12
+
+            H_composite = -(self._k_gamma/self._k_kappa) * (np.log(sum_exp))
+
+            weights = exp_shifted/sum_exp
+
+            A_combined = (weights[:, None] * A_robot_frame).sum(axis=0)
+            b_combined = -self._k_alpha_1 * H_composite
             
             # Translate elevated points (in the robot frame) to the World Frame for visualization
             translated_points = (R_robot_to_world_3D @ elevated_points_robot_frame.T).T + self._current_position
 
             if self._accept_body_commands:
-                lidar_points_xy = np.array([self.points_array[:,0] - 0.25, self.points_array[:,1]])
-                # front_mask = lidar_points_xy[:, 0] > 0.1
-                # lidar_points_xy = lidar_points_xy[front_mask]
+                try:
+                    lidar_points_xy = np.array([points_array[:,0] - 0.25, points_array[:,1]]).T
+                except ValueError:
+                    print(points_array.shape)
+                # lidar_points_xy = elevated_points_robot_frame
+                front_mask = (lidar_points_xy[:,0] > 0.1 ) 
+                # print(front)
+                lidar_points_xy = lidar_points_xy[front_mask]
+                # print(lidar_points_xy.shape)
 
-                dist_from_lidar = la.norm(lidar_points_xy, axis=0)
+                
+                dist_from_lidar = la.norm(lidar_points_xy, axis=1)
                 closest_index = np.argmin(dist_from_lidar)
-                closest_point = lidar_points_xy[:, closest_index]
+                closest_point = lidar_points_xy[closest_index,:]
                 self._desired_yaw = np.arctan2(closest_point[1], closest_point[0])
-                # print(dist_from_lidar.shape)
+                print(f"{closest_point[0]:.2f}, {closest_point[1]:.2f}")
+                # print(f"{closest_point[0]:.2f}, {closest_point[1]:.2f}")
 
                 normal = closest_point / np.linalg.norm(closest_point)
                 dist_to_point = dist_from_lidar[closest_index]
                 # hyperplane_point = closest_point - 1.5 * normal
                 # d = -normal @ hyperplane_point
 
-                h_ = 1.0 - dist_to_point
+                h_ = 1.49 - dist_to_point
                 A_ = normal.reshape(1, -1)
-                b_ = - 1.0 * h_
+                # A_ = 2 * closest_point
+                b_ = - self._k_alpha_2 * h_
 
-                print(f"{h_:.2f}")
+                # print(f"{h_:.2f}")
 
-                A_robot_frame = np.vstack((A_robot_frame, A_))
-                b_robot_frame = np.append(b_robot_frame, b_)
+                A_combined = np.vstack((A_combined, A_))
+                b_combined = [b_combined, b_]
 
 
-            A_list.append(A_robot_frame)
-            b_list.append(b_robot_frame)
+            A_list.append(A_combined)
+            b_list.append(b_combined)
+            # print(b_list)
 
             # print(A_robot_frame.shape)
             # print(b_robot_frame.shape)
@@ -518,7 +551,8 @@ class InspectCbf:
         # --- Final Matrix Construction ---
         if A_list:
             self.A = np.vstack(A_list)
-            self.b = np.concatenate(b_list)
+            self.b = np.hstack(b_list)
+            # print(self.A, self.b)
             self._constraints_active = True
         else:
             # If no elevated points, use a dummy 1x2 constraint with h=large positive (always safe)

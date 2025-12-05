@@ -14,7 +14,7 @@ class KeyboardTeleop:
             namespace = '/' + namespace
         self.namespace = namespace
 
-        self.publisher_ = rospy.Publisher(self.namespace + '/cmd_vel', Twist, queue_size=10)
+        self.publisher_ = rospy.Publisher(self.namespace + '/command/velocity', Twist, queue_size=10)
         self.linear_speed = [0.0, 0.0, 0.0]
 
         rospy.loginfo("Use arrow keys to move x/y, W/S for z. Press ESC to exit.")
