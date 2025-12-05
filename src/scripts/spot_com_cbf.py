@@ -69,15 +69,15 @@ class CbfVelocityController:
 
         self._recovery_enabled = False
 
-        self._safety_semi_major = 0.6
-        self._safety_semi_minor = 0.4
+        self._safety_semi_major = 0.65
+        self._safety_semi_minor = 0.5
 
         self.CBF_X_POW4 = self._safety_semi_major**2
         self.CBF_Y_POW4 = self._safety_semi_minor**2
 
         self._k_pos = 0.5
         self._k_yaw = 0.8
-        self._k_alpha = 1.0
+        self._k_alpha = 0.5
         self._k_gamma = 0.9
         self._k_kappa = 8.0
 
@@ -374,7 +374,7 @@ class CbfVelocityController:
         shifted_points = shifted_points[height_mask]
 
         # 2. Voxel Grid downsampling
-        voxel_size = 0.1
+        voxel_size = 0.05
         discrete_coords = np.floor(shifted_points / voxel_size).astype(np.int32)
         _, unique_indices = np.unique(discrete_coords, axis=0, return_index=True)
         shifted_points = shifted_points[unique_indices]
@@ -531,8 +531,8 @@ class CbfVelocityController:
 
         # Approximate safe set as a super‑ellipse of your design radius
         # Here just visualize the nominal CBF boundary you already use for points:
-        A_long = self._safety_semi_major - 0.01     # long radius in x
-        A_lat  = self._safety_semi_minor - 0.01      # lateral radius in y
+        A_long = self._safety_semi_major - 0.1     # long radius in x
+        A_lat  = self._safety_semi_minor - 0.15      # lateral radius in y
         n = 4.0
 
         pts = []

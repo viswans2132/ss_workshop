@@ -472,7 +472,7 @@ class InspectCbf:
                 # hyperplane_point = closest_point - 1.5 * normal
                 # d = -normal @ hyperplane_point
 
-                h_ = 1.5 - dist_to_point
+                h_ = 1.0 - dist_to_point
                 A_ = normal.reshape(1, -1)
                 b_ = - 1.0 * h_
 
