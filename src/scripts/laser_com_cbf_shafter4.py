@@ -11,6 +11,7 @@ from tf.transformations import euler_from_quaternion, quaternion_matrix
 import matplotlib.cm as cm
 import argparse
 import math
+from visualization_msgs.msg import Marker
 from ss_workshop.srv import ControlStatus, ControlStatusResponse
 
 
@@ -33,12 +34,12 @@ class VelocityController:
 		self.safety_semi_major = 1.0
 		self.safety_semi_minor = 0.5
 
-		self.CBF_H_POW2 = self.safety_semi_major**2
-		self.CBF_H_POW2 = self.safety_semi_major**2
+		self.CBF_H_POW2 = self.safety_semi_minor**2
+		self.CBF_V_POW2 = self.safety_semi_major**4
 
-		self._k_alpha = 0.5
-		self._k_gamma = 0.9
-		self._k_kappa = 8.0
+		self._k_alpha = 20.1
+		self._k_gamma = 0.5
+		self._k_kappa = 10.0
 
 		self.sp_threshold = 0.3
 		self.counter = 0.0
@@ -68,6 +69,7 @@ class VelocityController:
 		self.laser_pub = rospy.Publisher("/reduced_points", PointCloud2, queue_size=10)
 
 		self._control_status_server = rospy.Service(f"{namespace}/control_status", ControlStatus, self.return_control_status)
+		self.cbf_marker_pub = rospy.Publisher("cbf_safe_set", Marker, queue_size=1)
 
 
 		while not rospy.is_shutdown():
@@ -149,9 +151,9 @@ class VelocityController:
 		points = np.array(points)
 
 		distances = np.linalg.norm(points, axis=1)
-		points = points[distances <= 4.5]
+		points = points[distances <= 3.5]
 
-		voxel_size = 0.2
+		voxel_size = 0.05
 		discrete_coords = np.floor(points/voxel_size).astype(np.int32)
 		_, unique_indices = np.unique(discrete_coords, axis=0, return_index=True)
 		points = points[unique_indices]
@@ -182,15 +184,43 @@ class VelocityController:
 			else:
 				self.A = np.array([[0.0, 0.0, 1.0]])
 				self.b = np.array([-0.1*(0.3)])
-			print(self.b)
-
+			# print(self.b)
 
 			if len(elevated_points) > 0:
 				min_ele_height = elevated_points[np.argmin(elevated_points[:,2]), 2] - 0.04
 				self.b = np.array([-0.1*(- min_ele_height - 0.2)])
-				self.A = np.vstack((self.A, -3*elevated_points**2))
-				self.b = np.hstack((self.b, -self._k_alpha*(np.sum(elevated_points**4, 1) - 1.0)))
+				# self.A = np.vstack((self.A, -3*elevated_points**2))
+				# self.b = np.hstack((self.b, -0.5*(np.sum(elevated_points**4, 1) - 1.0)))
+                # 
+				X_r = elevated_points[:,0]
+				Y_r = elevated_points[:,1]
+				Z_r = elevated_points[:,2]
 
+				h_elevated = ((X_r**2 + Y_r**2)/self.CBF_H_POW2) + (Z_r**2/self.CBF_V_POW2) - 1.0
+
+				Ax = -2 * (X_r**1) / self.CBF_H_POW2
+				Ay = -2 * (Y_r**1) / self.CBF_H_POW2
+				Az = -2 * (Z_r**1) / self.CBF_V_POW2
+
+				A_elevated = np.column_stack((Ax, Ay, Az))
+
+				tanh_h = np.tanh(h_elevated/self._k_gamma)
+				scaled_tan_h = -self._k_kappa * tanh_h
+				exp_shifted = np.exp(scaled_tan_h)
+				sum_exp = np.sum(exp_shifted) + 1e-12
+
+				H_composite = -(self._k_gamma/self._k_kappa) * (np.log(sum_exp))
+
+				weights = exp_shifted/sum_exp
+
+				A_composite = (weights[:, None] * A_elevated).sum(axis=0)
+				b_composite = -self._k_alpha * H_composite
+
+				# A_list.append(A_composite)
+				# b_list.append(b_composite)
+
+				self.A = np.vstack((self.A, A_composite))
+				self.b = np.hstack((self.b, b_composite))
 
 				translated_points = elevated_points + self.position
 				fields = [PointField('x', 0, PointField.FLOAT32, 1), PointField('y', 4, PointField.FLOAT32, 1), PointField('z', 8, PointField.FLOAT32, 1), PointField('rgb', 12, PointField.FLOAT32, 1)]
@@ -199,20 +229,20 @@ class VelocityController:
 				pcl_msg.header.stamp = rospy.Time.now()
 				pcl_msg.header.frame_id = "world"
 
-				magn = 1*(np.sum(elevated_points**2, 1) - 1.0)
+				magn = -1*(np.sum(elevated_points**2, 1) - 1.0)
 				magn_normalized = (magn - magn.min())/(magn.max() - magn.min() + 0.0001)
-				color_map = cm.get_cmap('viridis')
+				color_map = cm.get_cmap('magma')
 				colors = (color_map(magn_normalized)[:,:3]*255).astype(np.uint8)
 				rgb_uint32 = (colors[:, 0].astype(np.uint32) << 16) | \
 							(colors[:, 1].astype(np.uint32) << 8) | \
 							(colors[:, 2].astype(np.uint32))
 				rgb_float = rgb_uint32.view(np.float32)
 				colored_points = np.column_stack((translated_points, rgb_float))
-				# print([rgb_float])
 
 				points = pc2.create_cloud(pcl_msg.header, fields, colored_points.tolist())
 
 				self.laser_pub.publish(points)
+				self.publish_cbf_safe_set()
 
 
 
@@ -240,7 +270,7 @@ class VelocityController:
 				print("Solver Error")
 				val = np.array([0.0, 0.0, 0.0])
 			
-			print(f"{val[0]:.2f}, {val[1]:.2f}")
+			# print(f"{val[0]:.2f}, {val[1]:.2f}")
 
 			return val
 
@@ -297,6 +327,31 @@ class VelocityController:
 
 			self.cmd_vel_pub.publish(vel_sp)
 			# print(f"{des_vel[0]:.2f}, {des_vel[1]:.2f}, {des_vel[2]:.2f}")
+
+	def publish_cbf_safe_set(self):
+		marker = Marker()
+		marker.header.frame_id = f"{self.namespace}/base_link"
+		marker.header.stamp = rospy.Time.now()
+		marker.ns = "cbf_safe_set"
+		marker.id = 0
+		marker.type = Marker.MESH_RESOURCE
+		marker.action = Marker.ADD
+		marker.pose.orientation.w = 1.0
+
+		marker.mesh_resource = "file:///home/godzillapc/catkin_workspaces/control_ws/src/ss_workshop/models/meshes/superellipsoid4.stl"
+		marker.mesh_use_embedded_materials = False
+
+
+		marker.scale.x = 1.0 * self.safety_semi_minor
+		marker.scale.y = 1.0 * self.safety_semi_minor
+		marker.scale.z = 1.0 * self.safety_semi_major
+
+		marker.color.r = 0.0
+		marker.color.g = 1.0
+		marker.color.b = 0.0
+		marker.color.a = 0.4
+
+		self.cbf_marker_pub.publish(marker)
 
 
 if __name__ == "__main__":
