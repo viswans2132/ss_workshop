@@ -39,6 +39,8 @@ include_directories(
   ${Eigen_INCLUDE_DIRS}
 )
 
+install(DIRECTORY models/meshes/
+        DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/meshes)
 
 
 add_library(ss_pid_controller
