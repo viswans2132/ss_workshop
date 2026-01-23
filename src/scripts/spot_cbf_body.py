@@ -67,8 +67,8 @@ class CbfVelocityController:
 
         self._recovery_enabled = False
 
-        self._safety_semi_major = 0.75
-        self._safety_semi_minor = 0.55
+        self._safety_semi_major = 0.85
+        self._safety_semi_minor = 0.45
 
         self.CBF_X_POW4 = self._safety_semi_major**4
         self.CBF_Y_POW4 = self._safety_semi_minor**4
@@ -351,9 +351,9 @@ class CbfVelocityController:
 
         # Convert the list of points to a NumPy array
         points = np.array(points)
-        shifted_points = np.array([points[:, 0] + 0.25, points[:, 1], points[:,2] + 0.05]).T
+        shifted_points = np.array([points[:, 0] + 0.28, points[:, 1], points[:,2] + 0.05]).T
 
-        rect_mask = ((shifted_points[:, 0] > 0.5) | (shifted_points[:, 0] < -0.5)) | ((shifted_points[:, 1] > 0.3) | (shifted_points[:, 0] < -0.3)) 
+        rect_mask = ((shifted_points[:, 0] > 0.5) | (shifted_points[:, 0] < -0.5)) | ((shifted_points[:, 1] > 0.3) | (shifted_points[:, 1] < -0.3)) 
         # print(rect_mask.shape)
 
         shifted_points = shifted_points[rect_mask]
@@ -366,7 +366,7 @@ class CbfVelocityController:
         shifted_points = shifted_points[height_mask]
 
         # 2. Voxel Grid downsampling
-        voxel_size = 0.25
+        voxel_size = 0.4
         discrete_coords = np.floor(shifted_points / voxel_size).astype(np.int32)
         _, unique_indices = np.unique(discrete_coords, axis=0, return_index=True)
         shifted_points = shifted_points[unique_indices]
@@ -402,13 +402,16 @@ class CbfVelocityController:
             return
 
         # Z-world position for filtering
-        z_world = rotated_points_world[:,2] + self._current_position[2]
+        # z_world = rotated_points_world[:,2] + self._current_position[2]
         
         # Find indices of elevated points (obstacles)
-        elevated_indices = np.where(z_world > 0.1)[0]
-        
-        # Extract the points in the ROBOT BODY FRAME that are elevated
-        elevated_points_robot_frame = self.points_array[elevated_indices]
+        elevated_indices = np.where(rotated_points_world[:,2] > -0.1)[0]
+
+        try:
+            # Extract the points in the ROBOT BODY FRAME that are elevated
+            elevated_points_robot_frame = self.points_array[elevated_indices]
+        except IndexError:
+            return
         
         # Reset constraint matrices
         A_list = []
@@ -450,7 +453,7 @@ class CbfVelocityController:
 
             pcl_msg = PointCloud2()
             pcl_msg.header.stamp = rospy.Time.now()
-            pcl_msg.header.frame_id = "odom" # Publish in a stable world-like frame
+            pcl_msg.header.frame_id = "spot/odom" # Publish in a stable world-like frame
 
             # Color points based on proximity to safety boundary
             magn = h_elevated # Use the CBF value h for coloring

@@ -69,15 +69,15 @@ class CbfVelocityController:
 
         self._recovery_enabled = False
 
-        self._safety_semi_major = 0.7
-        self._safety_semi_minor = 0.5
+        self._safety_semi_major = 0.9
+        self._safety_semi_minor = 0.45
 
         self.CBF_X_POW4 = self._safety_semi_major**2
         self.CBF_Y_POW4 = self._safety_semi_minor**2
 
         self._k_pos = 0.5
         self._k_yaw = 0.8
-        self._k_alpha = 0.5
+        self._k_alpha = 2.0
         self._k_gamma = 0.9
         self._k_kappa = 8.0
 
@@ -359,7 +359,7 @@ class CbfVelocityController:
 
         # Convert the list of points to a NumPy array
         points = np.array(points)
-        shifted_points = np.array([points[:, 0] + 0.28, points[:, 1], points[:,2] + 0.05]).T
+        shifted_points = np.array([points[:, 0] + 0.27, points[:, 1], points[:,2] + 0.05]).T
 
         rect_mask = ((shifted_points[:, 0] > 0.5) | (shifted_points[:, 0] < -0.5)) | ((shifted_points[:, 1] > 0.3) | (shifted_points[:, 1] < -0.3)) 
         # print(rect_mask.shape)
@@ -413,7 +413,7 @@ class CbfVelocityController:
         z_world = rotated_points_world[:,2] + self._current_position[2]
         
         # Find indices of elevated points (obstacles)
-        elevated_indices = np.where(z_world > 0.1)[0]
+        elevated_indices = np.where(rotated_points_world[:,2] > -0.1)[0]
         
         # Extract the points in the ROBOT BODY FRAME that are elevated
         try:
@@ -424,6 +424,10 @@ class CbfVelocityController:
         # Reset constraint matrices
         A_list = []
         b_list = []
+
+        # rospy.loginfo(f"Point array length: {elevated_points_robot_frame.shape}")
+        # rospy.loginfo(f"Point array length: {elevated_indices}")
+        # rospy.loginfo(f"Current Position: {self._current_position}")
         
         # --- Elevated Obstacle Constraints (Multiple 2D Super-Ellipsoidal Constraints) ---
         if len(elevated_points_robot_frame) > 0:
@@ -457,7 +461,7 @@ class CbfVelocityController:
             
             # --- Visualization ---
             # Translate elevated points (in the robot frame) to the World Frame for visualization
-            translated_points = rotated_points_world[elevated_indices] + self._current_position - np.array([0.28, 0.0, 0.05])
+            translated_points = rotated_points_world[elevated_indices] + self._current_position - np.array([0.27, 0.0, 0.05])
 
             fields = [PointField('x', 0, PointField.FLOAT32, 1), 
                       PointField('y', 4, PointField.FLOAT32, 1), 
