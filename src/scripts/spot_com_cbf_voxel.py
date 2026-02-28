@@ -63,21 +63,22 @@ class CbfVelocityController:
         # Control Flags
         self._odometry_received = False    # Flag to ensure initial position is known
         self._setpoint_received = autostart # Flag is true if autostart arg is used
+        self._lidar_received = False # Flag is true if autostart arg is used
         self._constraints_active = False   # Flag to check if obstacle constraints are present
         self._stop_command_received = False # Flag: True to force zero velocity
         self._control_status = 0 # Enumeration indicating the control status 0: Performing Task, 1: Task Complete, 2: Task Incomplete
 
         self._recovery_enabled = False
 
-        self._safety_semi_major = 0.65
-        self._safety_semi_minor = 0.6
+        self._safety_semi_major = 0.9
+        self._safety_semi_minor = 0.45
 
         self.CBF_X_POW4 = self._safety_semi_major**2
         self.CBF_Y_POW4 = self._safety_semi_minor**2
 
-        self._k_pos = 0.5
+        self._k_pos = 0.4
         self._k_yaw = 0.8
-        self._k_alpha = 0.5
+        self._k_alpha = 2.0
         self._k_gamma = 0.9
         self._k_kappa = 8.0
 
@@ -102,7 +103,7 @@ class CbfVelocityController:
             
         # TOPIC CHANGE: pointcloud -> velodyne_points
         self._pcl_subscriber = rospy.Subscriber(
-            f"{namespace}/filtered_pointcloud", PointCloud2, self.pointcloud_callback, queue_size=1)
+            f"{namespace}/filtered_points_body", PointCloud2, self.pointcloud_callback, queue_size=1)
             
         # TOPIC CHANGE: setpoint_pose -> command/pose
         self._setpoint_subscriber = rospy.Subscriber(
@@ -144,7 +145,7 @@ class CbfVelocityController:
             return True
 
         # 2. Initialization Check (Missing Data)
-        if not self._odometry_received or not self._setpoint_received:
+        if not self._odometry_received or not self._setpoint_received or not self._lidar_received:
             rospy.logwarn_throttle(1.0, "Waiting for Odometry and/or Setpoint data...")
             self._publish_zero_velocity()
             return True
@@ -242,11 +243,11 @@ class CbfVelocityController:
             u_filtered_body = 0.0*u_filtered_body
         
         # Apply clamping to output velocities
-        goal_msg.linear.x = np.clip(u_filtered_body[0], -0.4, 0.4)
+        goal_msg.linear.x = np.clip(u_filtered_body[0], -1.0, 1.0)
         goal_msg.linear.y = np.clip(u_filtered_body[1], -0.4, 0.4)
         goal_msg.angular.z = u_yaw
             
-        self._velocity_publisher.publish(goal_msg)
+        # self._velocity_publisher.publish(goal_msg)
         rospy.loginfo(f'Command: Linear X: {goal_msg.linear.x:.2f}, Linear Y: {goal_msg.linear.y:.2f}, Angular Z: {goal_msg.angular.z:.2f}')
         rospy.loginfo(f'Error X: {position_error[0]:.2f}, Error Y: {position_error[1]:.2f}')
 
@@ -359,7 +360,7 @@ class CbfVelocityController:
 
         # Convert the list of points to a NumPy array
         points = np.array(points)
-        # shifted_points = np.array([points[:, 0] + 0.25, points[:, 1], points[:,2] + 0.05]).T
+        shifted_points = np.array([points[:, 0] + 0.28, points[:, 1], points[:,2] + 0.05]).T
 
         rect_mask = ((points[:, 0] > 0.5) | (points[:, 0] < -0.5)) | ((points[:, 1] > 0.2) | (points[:, 1] < -0.2)) 
         # print(rect_mask.shape)
@@ -383,6 +384,10 @@ class CbfVelocityController:
             self._constraints_active = False
         else:
             self._generate_constraint_matrices()
+
+        if not self._lidar_received:
+            self._lidar_received = True
+            rospy.loginfo("Lidar Points Initialized.")
 
 
     def _generate_constraint_matrices(self):
@@ -444,7 +449,7 @@ class CbfVelocityController:
 
         pcl_msg = PointCloud2()
         pcl_msg.header.stamp = rospy.Time.now()
-        pcl_msg.header.frame_id = "base" # Publish in a stable world-like frame
+        pcl_msg.header.frame_id = "spot/base_link" # Publish in a stable world-like frame
 
         # Color points based on proximity to safety boundary
         magn = h_elevated # Use the CBF value h for coloring
@@ -456,13 +461,13 @@ class CbfVelocityController:
                      (colors[:, 1].astype(np.uint32) << 8) | \
                      (colors[:, 2].astype(np.uint32))
         rgb_float = rgb_uint32.view(np.float32)
-        
-        # Stack position (translated_points) and color (rgb_float)
-        colored_points = np.column_stack((translated_points, rgb_float))
+        if len(translated_points) == len(rgb_float):
+            # Stack position (translated_points) and color (rgb_float)
+            colored_points = np.column_stack((translated_points, rgb_float))
 
-        points = pc2.create_cloud(pcl_msg.header, fields, colored_points.tolist())
-        self.laser_pub.publish(points)
-        self._publish_cbf_safe_set(A_combined, H_composite)
+            points = pc2.create_cloud(pcl_msg.header, fields, colored_points.tolist())
+            self.laser_pub.publish(points)
+            self._publish_cbf_safe_set(A_combined, H_composite)
         
         # --- Final Matrix Construction ---
         if A_list:

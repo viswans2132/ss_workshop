@@ -9,12 +9,14 @@ import numpy as np
 import numpy.linalg as la
 import cvxpy as cp
 import argparse 
+# from ttictoc import tic,toc
+from ttictoc import tic, toc
 # ROS 1 message types
 from geometry_msgs.msg import Twist, PoseStamped
 from nav_msgs.msg import Odometry 
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import Bool, String # Updated to include String for stop command
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, Float64
 # Point Cloud Imports
 from sensor_msgs.msg import PointCloud2, PointField
 import sensor_msgs.point_cloud2 as pc2
@@ -29,7 +31,7 @@ from geometry_msgs.msg import Point
 class CbfVelocityController:
     def __init__(self, namespace='', autostart=False, max_speed=1.0, recovery=False):
         # 1. ROS 1 Node Initialization
-        rospy.init_node('cbf_velocity_controller', anonymous=True)
+        rospy.init_node('cbf_velocity_controller', anonymous=False)
         rospy.loginfo("CbfVelocityController node initialized (ROS 1) with namespace: '{}'".format(namespace))
         
         # --- Namespace Check ---
@@ -62,6 +64,7 @@ class CbfVelocityController:
         
         # Control Flags
         self._odometry_received = False    # Flag to ensure initial position is known
+        self._lidar_received = False    # Flag to ensure initial position is known
         self._setpoint_received = autostart # Flag is true if autostart arg is used
         self._constraints_active = False   # Flag to check if obstacle constraints are present
         self._stop_command_received = False # Flag: True to force zero velocity
@@ -69,14 +72,14 @@ class CbfVelocityController:
 
         self._recovery_enabled = False
 
-        self._safety_semi_major = 0.9
-        self._safety_semi_minor = 0.45
+        self._safety_semi_major = 1.0
+        self._safety_semi_minor = 0.6
 
         self.CBF_X_POW4 = self._safety_semi_major**2
         self.CBF_Y_POW4 = self._safety_semi_minor**2
 
-        self._k_pos = 0.5
-        self._k_yaw = 0.8
+        self._k_pos = np.array([4.0, 1.5])
+        self._k_yaw = 1.0
         self._k_alpha = 2.0
         self._k_gamma = 0.9
         self._k_kappa = 8.0
@@ -115,6 +118,8 @@ class CbfVelocityController:
         self._control_status_server = rospy.Service(f"{namespace}/control_status", ControlStatus, self.return_control_status)
         self.cbf_marker_pub = rospy.Publisher("cbf_safe_set", Marker, queue_size=1)
 
+        self.pub_solve_time = rospy.Publisher("/spot/cbf_solve_time",Float64,queue_size=1)
+
         print("Sleeping")
         time.sleep(1)
 
@@ -144,8 +149,8 @@ class CbfVelocityController:
             return True
 
         # 2. Initialization Check (Missing Data)
-        if not self._odometry_received or not self._setpoint_received:
-            rospy.logwarn_throttle(1.0, "Waiting for Odometry and/or Setpoint data...")
+        if not self._odometry_received or not self._setpoint_received  or not self._lidar_received:
+            rospy.logwarn_throttle(1.0, "Waiting. Make sure the odometry, setpoints and lidar points are ON.")
             self._publish_zero_velocity()
             return True
 
@@ -177,6 +182,9 @@ class CbfVelocityController:
         if self._check_control_state_and_stop(position_error, yaw_error):
             return
 
+        R_world_to_robot = np.array([[np.cos(self._current_yaw), np.sin(self._current_yaw)], 
+                                     [-np.sin(self._current_yaw), np.cos(self._current_yaw)]])
+
         # --- Control Logic (only runs if checks above pass) ---
         goal_msg = Twist()
 
@@ -188,14 +196,13 @@ class CbfVelocityController:
             u_yaw = 0.0
 
         else:
-            u_nominal = np.array([self._k_pos * position_error[0], self._k_pos * position_error[1]])
-            R_world_to_robot = np.array([[np.cos(self._current_yaw), np.sin(self._current_yaw)], 
-                                         [-np.sin(self._current_yaw), np.cos(self._current_yaw)]])
+            u_nominal = np.array([self._k_pos[0] * position_error[0], self._k_pos[1] * position_error[1]])
             # --- 5. Transform and Publish ---
             # Project World Frame velocity (u_filtered_world) into Robot Frame
             u_nominal_body = R_world_to_robot @ u_nominal
-            if la.norm(u_nominal_body) > self._max_speed:
-                u_nominal_body = self._max_speed * u_nominal_body / la.norm(u_nominal_body) # Normalize and set max speed if moving away
+            u_nominal_body = np.clip(u_nominal_body, np.array([-1.0, -0.4]), np.array([1.0, 0.4]))
+            # if la.norm(u_nominal_body) > self._max_speed:
+            #     u_nominal_body = self._max_speed * u_nominal_body / la.norm(u_nominal_body) # Normalize and set max speed if moving away
 
 
 
@@ -226,9 +233,9 @@ class CbfVelocityController:
                 yaw_error = (yaw_error + np.pi) % (2 * np.pi) - np.pi 
 
         
-        u_yaw = np.clip(self._k_yaw * yaw_error, -0.5, 0.5)
+        # u_yaw = np.clip(self._k_yaw * yaw_error, -0.5, 0.5)
 
-        if (self._control_status != 1) and (la.norm(u_filtered_body) < self._min_speed) and (np.abs(u_yaw) < 0.02):
+        if (self._control_status != 1) and (la.norm(u_filtered_body) < self._min_speed) and (np.abs(yaw_error) < 0.05):
             self._counter += 1
             if self._counter > 10:
                 self._control_status = 2
@@ -236,19 +243,20 @@ class CbfVelocityController:
             self._counter = 0
         # print(self._counter)
 
-        u_yaw = np.clip(0.8 * yaw_error, -0.5, 0.5)        
+        u_yaw = np.clip(self._k_yaw * yaw_error, -0.5, 0.5)     
 
         if la.norm(u_filtered_body) < self._min_speed:
             u_filtered_body = 0.0*u_filtered_body
         
         # Apply clamping to output velocities
-        goal_msg.linear.x = np.clip(u_filtered_body[0], -0.4, 0.4)
+        goal_msg.linear.x = np.clip(u_filtered_body[0], -1.0, 1.0)
         goal_msg.linear.y = np.clip(u_filtered_body[1], -0.4, 0.4)
         goal_msg.angular.z = u_yaw
             
         self._velocity_publisher.publish(goal_msg)
+        position_error_body = R_world_to_robot@position_error
         rospy.loginfo(f'Command: Linear X: {goal_msg.linear.x:.2f}, Linear Y: {goal_msg.linear.y:.2f}, Angular Z: {goal_msg.angular.z:.2f}')
-        rospy.loginfo(f'Error X: {position_error[0]:.2f}, Error Y: {position_error[1]:.2f}')
+        rospy.loginfo(f'Error X: {position_error_body[0]:.2f}, Error Y: {position_error_body[1]:.2f}')
 
 
     def _cbf_filter(self, u_nominal):
@@ -264,7 +272,13 @@ class CbfVelocityController:
             
             try:
                 # Use OSQP solver
+                tic()
                 prob.solve(solver=cp.OSQP)
+                e = toc()
+                rospy.loginfo(f"solving time is {e}")
+                solvMsg = Float64()
+                solvMsg.data = e
+                self.pub_solve_time.publish(solvMsg)
                 u = self.u.value
             except cp.error.SolverError:
                 rospy.logwarn("QP Solver Error: Holding the position.")
@@ -369,12 +383,12 @@ class CbfVelocityController:
         distance_mask = la.norm(shifted_points, axis=1) < 3.5
         shifted_points = shifted_points[distance_mask]
 
-        height_mask = (shifted_points[:,2] > -0.15) & (shifted_points[:,2] < 0.05)
+        height_mask = (shifted_points[:,2] > -0.15) & (shifted_points[:,2] < 0.45)
 
         shifted_points = shifted_points[height_mask]
 
         # 2. Voxel Grid downsampling
-        voxel_size = 0.05
+        voxel_size = 0.1
         discrete_coords = np.floor(shifted_points / voxel_size).astype(np.int32)
         _, unique_indices = np.unique(discrete_coords, axis=0, return_index=True)
         shifted_points = shifted_points[unique_indices]
@@ -386,6 +400,10 @@ class CbfVelocityController:
             self._constraints_active = False
         else:
             self._generate_constraint_matrices()
+            
+        if not self._lidar_received:
+            self._lidar_received = True
+            rospy.loginfo("Lidar Points Received.")
 
 
     def _generate_constraint_matrices(self):
